@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import Sidebar from '../../components/Sidebar';
 import {
   RencanaMenu7Hari,
   MenuHari,
@@ -413,131 +414,15 @@ export default function MenuPage() {
   return (
     <div className="bg-[#fff8f7] font-sans text-[#2c1514] min-h-screen">
       {/* ========================================================= */}
-      {/* 1. ASIDE SIDEBAR (Fixed Desktop, Slide-over Mobile)       */}
+      {/* 1. ASIDE SIDEBAR (Shared Component)                       */}
       {/* ========================================================= */}
-      {/* Mobile Backdrop */}
-      {mobileSidebarOpen && (
-        <div
-          onClick={() => setMobileSidebarOpen(false)}
-          className="fixed inset-0 bg-black/40 z-50 lg:hidden backdrop-blur-xs transition-opacity"
-        />
-      )}
-
-      <aside
-        className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-[#c3c9b2]/40 z-50 flex flex-col justify-between py-6 transition-transform duration-300 ${
-          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
-      >
-        <div className="flex flex-col gap-6">
-          {/* Brand Area */}
-          <div className="px-6 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#b2f2b6] flex items-center justify-center text-[#306a3b] shadow-xs">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-[17px] text-[#306a3b] tracking-tight leading-none">
-                  PORSI KITA
-                </span>
-                <span className="text-[11px] text-[#737a65] mt-1 leading-none font-medium">
-                  Menu &amp; Finansial
-                </span>
-              </div>
-            </Link>
-
-            {/* Mobile Close Button */}
-            <button
-              type="button"
-              onClick={() => setMobileSidebarOpen(false)}
-              className="lg:hidden text-stone-500 hover:text-stone-800 p-1"
-              aria-label="Tutup navigasi"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="flex flex-col gap-1 px-4">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-[14px] font-medium text-[#434937] hover:bg-[#ffe9e7] hover:text-[#2c1514] transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <span>Beranda</span>
-            </Link>
-
-            <Link
-              href="/menu"
-              className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-[14px] font-semibold bg-[#b2f2b6] text-[#367041] shadow-[0_2px_10px_rgba(12,75,32,0.06)] transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span>Kalender Menu</span>
-            </Link>
-
-            <Link
-              href="/dashboard#dompet"
-              className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-[14px] font-medium text-[#434937] hover:bg-[#ffe9e7] hover:text-[#2c1514] transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-              </svg>
-              <span>Buku Kas</span>
-            </Link>
-
-            <Link
-              href={`/belanja/${rencanaMenu.id}`}
-              className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-[14px] font-medium text-[#434937] hover:bg-[#ffe9e7] hover:text-[#2c1514] transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              <span>Daftar Belanja</span>
-            </Link>
-
-            <Link
-              href="/keluarga"
-              className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-[14px] font-medium text-[#434937] hover:bg-[#ffe9e7] hover:text-[#2c1514] transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-              </svg>
-              <span>Pengaturan</span>
-            </Link>
-          </nav>
-        </div>
-
-        {/* Sidebar Footer Info */}
-        <div className="px-4 flex flex-col gap-2">
-          <div className="p-3.5 rounded-2xl bg-[#fff0ef] flex items-center gap-3 border border-stone-200/50">
-            <div className="w-8 h-8 rounded-full bg-[#466800]/10 flex items-center justify-center text-[#466800]">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[11px] text-[#737a65] font-semibold">Paket Keluarga</span>
-              <span className="text-[13px] font-bold text-[#2c1514]">
-                {anggotaList.length} Anggota Aktif
-              </span>
-            </div>
-          </div>
-
-          <Link
-            href="/"
-            className="text-[12px] text-center text-[#737a65] hover:text-[#306a3b] py-1 font-medium transition"
-          >
-            ← Halaman Utama
-          </Link>
-        </div>
-      </aside>
+      <Sidebar
+        activePath="kalender-menu"
+        mobileOpen={mobileSidebarOpen}
+        setMobileOpen={setMobileSidebarOpen}
+        anggotaCount={anggotaList.length}
+        rencanaMenuId={rencanaMenu.id}
+      />
 
       {/* ========================================================= */}
       {/* 2. TOP HEADER (Mobile & Desktop)                         */}

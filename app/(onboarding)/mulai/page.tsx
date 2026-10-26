@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { setStoredOnboarded } from '../../lib/store';
+import { setStoredOnboarded } from '../../../lib/store';
 
 export default function OnboardingPage() {
   const router = useRouter();
