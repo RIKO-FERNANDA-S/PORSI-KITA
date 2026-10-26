@@ -1,26 +1,118 @@
 @import "tailwindcss";
 
+@theme {
+  --color-porsi-light: #F8F9FA;
+  --color-porsi-primary: #85B620;
+  --color-porsi-accent: #9CD934;
+  --color-porsi-dark: #143118;
+  --color-porsi-black: #0D0807;
+  --color-porsi-textGray: #7E7E7E;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* Netral */
+  --bg: #FAFAFA;
+  --surface: #FFFFFF;
+  --surface-muted: #E2E0E1;
+  --ink: #0D0101;
+  --text-muted: #858585;
+  --text-muted-aa: #5F5F5F;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Porsi Kita Official Color Tokens */
+  --porsi-light: #F8F9FA;
+  --porsi-primary: #85B620;
+  --porsi-accent: #9CD934;
+  --porsi-dark: #143118;
+  --porsi-black: #0D0807;
+  --porsi-textGray: #7E7E7E;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Hijau (Satu keluarga hue) */
+  --green-600: #6DA003;
+  --green-500: #76AB0D;
+  --green-400: #8CC425;
+  --lime-300: #A5E342;
+  --lime-bell: #9DD939;
+  --green-forest: #0C4B20;
+  --green-text-aa: #4E7500;
+
+  /* Gradien & Overlay */
+  --grad-cta: linear-gradient(90deg, #6DA103 0%, #A8E645 100%);
+  --grad-panel: linear-gradient(180deg, #6DA003 0%, #98D333 100%);
+  --overlay-card: rgba(255, 255, 255, 0.38);
+  --overlay-chip: rgba(255, 255, 255, 0.60);
+
+  /* Bentuk & Elevasi */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-sheet: 36px;
+  --r-full: 999px;
+  --shadow-cta: 0 0 0 4px rgba(165, 227, 66, 0.45), 0 8px 14px -4px rgba(141, 196, 37, 0.35);
+
+  /* Tipografi */
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--porsi-light);
+  color: var(--porsi-black);
+  font-family: var(--font);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Utilities Porsi Kita */
+.bg-porsi-light { background-color: #F8F9FA; }
+.text-porsi-light { color: #F8F9FA; }
+.bg-porsi-primary { background-color: #85B620; }
+.text-porsi-primary { color: #85B620; }
+.border-porsi-primary { border-color: #85B620; }
+.bg-porsi-accent { background-color: #9CD934; }
+.text-porsi-accent { color: #9CD934; }
+.border-porsi-accent { border-color: #9CD934; }
+.bg-porsi-dark { background-color: #143118; }
+.text-porsi-dark { color: #143118; }
+.border-porsi-dark { border-color: #143118; }
+.bg-porsi-black { background-color: #0D0807; }
+.text-porsi-black { color: #0D0807; }
+.text-porsi-textGray { color: #7E7E7E; }
+.border-porsi-textGray { border-color: #7E7E7E; }
+
+.bg-porsi-bg { background-color: var(--bg); }
+.bg-porsi-surface { background-color: var(--surface); }
+.bg-porsi-muted { background-color: var(--surface-muted); }
+.bg-porsi-ink { background-color: var(--ink); }
+.bg-porsi-forest { background-color: var(--green-forest); }
+.bg-porsi-lime-bell { background-color: var(--lime-bell); }
+
+.text-porsi-ink { color: var(--ink); }
+.text-porsi-muted { color: var(--text-muted); }
+.text-porsi-muted-aa { color: var(--text-muted-aa); }
+.text-porsi-green-aa { color: var(--green-text-aa); }
+.text-porsi-green-600 { color: var(--green-600); }
+
+.grad-cta {
+  background: var(--grad-cta);
+}
+
+.grad-panel {
+  background: var(--grad-panel);
+}
+
+.overlay-card {
+  background: var(--overlay-card);
+}
+
+.overlay-chip {
+  background: var(--overlay-chip);
+}
+
+.shadow-cta {
+  box-shadow: var(--shadow-cta);
+}
+
+.tabular-numbers {
+  font-variant-numeric: tabular-nums;
 }

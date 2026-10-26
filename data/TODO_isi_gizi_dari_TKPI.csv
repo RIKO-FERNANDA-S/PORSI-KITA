@@ -1,0 +1,13 @@
+Kode_TKPI,Nama_Bahan,Kategori,Dipakai_di_jumlah_resep,Prioritas,Kolom_yang_diisi
+MG001,Minyak goreng,Lemak/Minyak,13,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+BW001,Bawang merah,Bumbu,13,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+BW002,Bawang putih honan,Bumbu,12,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+GL001,Gula pasir konsumsi,Gula,3,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+MK001,Kecap manis,Bumbu/Saus,3,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+CB001,Cabai merah keriting,Bumbu,1,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+DG005,Kangkung,Sayuran,1,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+DG008,Buncis,Sayuran,1,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+DG030,Jagung manis,Sayuran,1,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+AR005,Tepung terigu,Serealia,1,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+MK002,Tauco,Bumbu/Saus,1,1-wajib,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"
+CF030,Ikan bandeng,Ikan/Biota Air,0,2-opsional,"Energi, Protein, Lemak, Karbohidrat, Kalsium, Zat Besi, Seng, Vitamin A, BDD, Sumber_Data, Tipe_Nilai (+ ganti Kode_TKPI dengan kode asli buku)"

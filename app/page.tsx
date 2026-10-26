@@ -1,69 +1,1342 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import BrandLogo from '../components/BrandLogo';
+import BottomNav from '../components/BottomNav';
+import {
+  getStoredKeluarga,
+  getStoredAnggota,
+  getStoredMenu,
+  saveStoredMenu,
+} from '../lib/store';
+import { Anggota, Keluarga, RencanaMenu7Hari } from '../lib/types';
+import { hitungKebutuhan } from '../lib/nutrition/akg';
+import { generateMenu } from '../lib/planner/generate';
+
+export default function PorsiKitaPage() {
+  const router = useRouter();
+  const [keluarga, setKeluarga] = useState<Keluarga | null>(null);
+  const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
+  const [rencanaMenu, setRencanaMenu] = useState<RencanaMenu7Hari | null>(null);
+  const [activeFinanceTab, setActiveFinanceTab] = useState<'pemasukan' | 'pengeluaran'>('pemasukan');
+  const [showNotification, setShowNotification] = useState(false);
+  const [viewMode, setViewMode] = useState<'landing' | 'app'>('landing');
+
+  // Interactive Floating Budget Bar states
+  const [budgetHarian, setBudgetHarian] = useState(45000);
+  const [durasiMenu, setDurasiMenu] = useState<'7 Hari' | '14 Hari'>('7 Hari');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    const k = getStoredKeluarga();
+    const a = getStoredAnggota();
+    const m = getStoredMenu();
+    setKeluarga(k);
+    setAnggotaList(a);
+    setRencanaMenu(m);
+
+    // Cek preferensi tampilan tersimpan
+    const savedMode = localStorage.getItem('porsi_kita_active_view');
+    if (savedMode === 'app') {
+      setViewMode('app');
+    }
+  }, []);
+
+  const handleSwitchToApp = () => {
+    localStorage.setItem('porsi_kita_active_view', 'app');
+    setViewMode('app');
+  };
+
+  const handleSwitchToLanding = () => {
+    localStorage.setItem('porsi_kita_active_view', 'landing');
+    setViewMode('landing');
+  };
+
+  const handleSusunMenu = () => {
+    if (!keluarga) return;
+    setIsGenerating(true);
+    const fresh = generateMenu({
+      familyId: keluarga.id,
+      familyName: keluarga.alias,
+      budgetHarianRp: budgetHarian,
+      anggota: anggotaList,
+      seed: Date.now(),
+    });
+    saveStoredMenu(fresh);
+    setRencanaMenu(fresh);
+    setTimeout(() => {
+      setIsGenerating(false);
+      localStorage.setItem('porsi_kita_active_view', 'app');
+      setViewMode('app');
+      router.push('/menu');
+    }, 400);
+  };
+
+  if (!keluarga) {
+    return (
+      <div className="min-h-screen bg-[#fff8f7] flex items-center justify-center text-[#5e5e5f] text-sm font-sans">
+        Memuat data Porsi Kita...
+      </div>
+    );
+  }
+
+  // Hitung angka keuangan dapur
+  const budgetMingguan = keluarga.budget_harian_rp * 7;
+  const totalBiayaMenu = rencanaMenu?.total_biaya_mingguan_rp || 186000;
+  const saldoDisplay = activeFinanceTab === 'pemasukan' ? budgetMingguan : totalBiayaMenu;
+
+  // =========================================================================
+  // VIEW 1: REVISED EDITORIAL LANDING PAGE (Sesuai Desain & Next.js Standards)
+  // =========================================================================
+  if (viewMode === 'landing') {
+    return (
+      <div className="min-h-screen bg-[#fff8f7] text-[#2c1514] font-sans antialiased selection:bg-[#bbf45e]/40">
+        
+        {/* ========================================================= */}
+        {/* 1. HEADER (Fixed, Surface 85%, Blur, Shadow) */}
+        {/* ========================================================= */}
+        <header className="fixed top-0 left-0 right-0 z-50 bg-[#fff8f7]/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          <div className="h-20 max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 flex items-center justify-between gap-6">
+            
+            {/* Logo Brand "PORSI KITA" */}
+            <Link href="/" className="flex items-center gap-2 group">
+              <span className="font-extrabold text-[22px] tracking-tight uppercase text-[#466800]">
+                PORSI KITA
+              </span>
+            </Link>
+
+            {/* Menu Navigasi Tengah */}
+            <nav className="hidden lg:flex items-center gap-2">
+              <a
+                href="#cara-kerja"
+                className="px-4 py-2 rounded-full text-[14px] font-semibold text-[#434937] hover:text-[#2c1514] hover:bg-[#ffe9e7]/60 transition-colors"
+              >
+                Cara Kerja
+              </a>
+              <a
+                href="#standar-gizi"
+                className="px-4 py-2 rounded-full text-[14px] font-semibold text-[#434937] hover:text-[#2c1514] hover:bg-[#ffe9e7]/60 transition-colors"
+              >
+                Standar Gizi
+              </a>
+              <a
+                href="#fitur"
+                className="px-4 py-2 rounded-full text-[14px] font-semibold text-[#434937] hover:text-[#2c1514] hover:bg-[#ffe9e7]/60 transition-colors"
+              >
+                Fitur
+              </a>
+              <a
+                href="#posyandu-api"
+                className="px-4 py-2 rounded-full text-[14px] font-semibold text-[#434937] hover:text-[#2c1514] hover:bg-[#ffe9e7]/60 transition-colors"
+              >
+                Posyandu & API
+              </a>
+              <a
+                href="#kontak"
+                className="px-4 py-2 rounded-full text-[14px] font-semibold text-[#434937] hover:text-[#2c1514] hover:bg-[#ffe9e7]/60 transition-colors"
+              >
+                Kontak
+              </a>
+            </nav>
+
+            {/* Aksi Kanan: Tombol Mulai Sekarang & Avatar */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSwitchToApp}
+                className="hidden sm:inline-flex text-[12px] font-bold uppercase tracking-wider text-[#306a3b] hover:text-[#466800] px-3 py-1.5 transition"
+              >
+                Demo App
+              </button>
+
+              <Link
+                href="/daftar"
+                className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-[12px] tracking-wider uppercase text-[#466800] border border-[#466800]/30 hover:bg-[#6da003] hover:text-white transition-all duration-200 font-semibold"
+              >
+                MULAI SEKARANG
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleSwitchToApp}
+                className="w-8 h-8 rounded-full bg-[#466800] text-white flex items-center justify-center shrink-0 hover:bg-[#306a3b] transition"
+                title="Buka Dashboard Profil"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </button>
+            </div>
+
+          </div>
+        </header>
+
+        {/* ========================================================= */}
+        {/* MAIN BODY CONTAINER */}
+        {/* ========================================================= */}
+        <main className="w-full pt-20 bg-[#fff8f7] min-h-[calc(100vh-80px)]">
+          <div className="flex flex-col w-full">
+
+            {/* ========================================================= */}
+            {/* SECTION A: HERO SECTION & FLOATING BUDGET BAR */}
+            {/* ========================================================= */}
+            <section className="relative w-full overflow-hidden bg-[#2c1514] text-[#fff8f7] -mt-20 pt-20">
+              
+              {/* Background Image with Boutique Editorial Overlay */}
+              <div
+                className="absolute inset-0 w-full h-full bg-cover bg-center"
+                style={{
+                  backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCdfEqnUJ_QwvbrRMv5jwnX5W5vYw9JmdVlWamr-EoHmrINh6DVoetmEKm_YYih8YAxhyO5IXr9Cmo489_0lxPOnkazy-orLcwxZn7MfZEe_yNWtn5_qw0kd2cPECW8J4GdW9qpGGNUzPUEApomnOCo_rmQC1W4OUzr5St9RYRVJdbVa8cNocBKWRuU7HwmGbZikpLp70-gWwT1phJ1Eiico4fyaLA_d3xVImJNmA0')",
+                }}
+              />
+
+              {/* Layered Gradient Scrim */}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#2c1514]/95 via-[#2c1514]/85 to-[#306a3b]/70" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#2c1514] via-transparent to-black/30" />
+
+              {/* Hero Content Container */}
+              <div className="relative max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 pt-16 pb-36 md:pt-24 md:pb-44 flex flex-col justify-center min-h-[640px]">
+                <div className="max-w-2xl flex flex-col gap-4">
+                  
+                  {/* Sub-tagline badge */}
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 self-start">
+                    <span className="w-2 h-2 rounded-full bg-[#bbf45e]" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white">
+                      Standar Gizi Resmi Kemenkes RI
+                    </span>
+                  </div>
+
+                  {/* Headline 3-baris */}
+                  <h1 className="text-[38px] sm:text-[48px] lg:text-[56px] font-bold text-white tracking-tight leading-[1.1]">
+                    Satu Masakan,<br />
+                    Porsi Gizi Tiap<br />
+                    <span className="text-[#a0d745]">Anggota Keluarga.</span>
+                  </h1>
+
+                  {/* Sub-teks */}
+                  <p className="text-[16px] sm:text-[18px] text-[#ffe9e7] leading-relaxed max-w-xl">
+                    Perencana menu hemat berbasis data resmi AKG Kemenkes & TKPI. Porsi tepat untuk balita, anak, ibu hamil, dewasa, hingga lansia tanpa perlu repot masak terpisah.
+                  </p>
+
+                  {/* 3 Ikon kecil kredibilitas */}
+                  <div className="flex flex-wrap items-center gap-6 pt-2 text-[#fff8f7]">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-[#bbf45e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-[13px] font-semibold tracking-wide">Verified AKG & TKPI</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-[#bbf45e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span className="text-[13px] font-semibold tracking-wide">Privasi Aman (Non-PII)</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-[#bbf45e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      <span className="text-[13px] font-semibold tracking-wide">Ramah WA & Hemat Kuota</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </section>
+
+            {/* ========================================================= */}
+            {/* FLOATING INTERACTIVE BUDGET BAR (Overlapping Hero) */}
+            {/* ========================================================= */}
+            <div className="relative max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 -mt-20 md:-mt-24 z-20 w-full">
+              <div className="bg-[#306a3b] text-white rounded-2xl p-6 md:p-8 shadow-2xl relative border border-white/10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 items-center">
+                  
+                  {/* 1. BUDGET HARIAN */}
+                  <div className="flex flex-col border-b sm:border-b-0 sm:border-r border-white/15 pb-4 sm:pb-0 pr-0 sm:pr-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-[#ffe9e7] uppercase tracking-wider">
+                        BUDGET HARIAN
+                      </span>
+                      <svg className="w-4 h-4 text-[#bbf45e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-[24px] font-bold text-white tracking-tight">
+                      Rp {(budgetHarian / 1000).toFixed(0)}rb
+                    </span>
+                    <span className="text-[13px] text-[#ffe2df]">Harga Pasar Lokal</span>
+                  </div>
+
+                  {/* 2. DURASI MENU */}
+                  <div className="flex flex-col border-b sm:border-b-0 lg:border-r border-white/15 pb-4 sm:pb-0 pr-0 lg:pr-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-[#ffe9e7] uppercase tracking-wider">
+                        DURASI MENU
+                      </span>
+                      <svg className="w-4 h-4 text-[#bbf45e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <span className="text-[24px] font-bold text-white tracking-tight">
+                      {durasiMenu}
+                    </span>
+                    <span className="text-[13px] text-[#ffe2df]">Mingguan / Harian</span>
+                  </div>
+
+                  {/* 3. ANGGOTA (>2 THN) */}
+                  <div className="flex flex-col border-b sm:border-b-0 sm:border-r border-white/15 pb-4 sm:pb-0 pr-0 sm:pr-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-[#ffe9e7] uppercase tracking-wider">
+                        ANGGOTA (&gt;2 THN)
+                      </span>
+                      <svg className="w-4 h-4 text-[#bbf45e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-[24px] font-bold text-white tracking-tight">
+                      {anggotaList.length} Orang
+                    </span>
+                    <span className="text-[13px] text-[#ffe2df]">Anak, Bumil, Lansia</span>
+                  </div>
+
+                  {/* 4. FILTER ALERGI */}
+                  <div className="flex flex-col border-b sm:border-b-0 pb-4 sm:pb-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-[#ffe9e7] uppercase tracking-wider">
+                        FILTER ALERGI
+                      </span>
+                      <svg className="w-4 h-4 text-[#bbf45e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                    </div>
+                    <span className="text-[24px] font-bold text-white tracking-tight">
+                      0 Alergen
+                    </span>
+                    <span className="text-[13px] text-[#ffe2df]">Bebas Alergi / Pilih</span>
+                  </div>
+
+                  {/* 5. CTA BUTTON */}
+                  <div className="flex flex-col justify-center sm:col-span-2 lg:col-span-1">
+                    <button
+                      type="button"
+                      onClick={handleSusunMenu}
+                      disabled={isGenerating}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-[#6da003] hover:bg-[#466800] text-white font-bold text-[14px] py-4 px-6 transition-all duration-200 shadow-lg hover:shadow-xl active:scale-[0.98] disabled:opacity-75"
+                    >
+                      <span>{isGenerating ? 'MENYUSUN...' : 'SUSUN MENU'}</span>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </button>
+                  </div>
+
+                </div>
+
+                {/* Tombol bulat panah ke bawah */}
+                <a
+                  aria-label="Gulir ke rincian fitur"
+                  href="#cara-kerja"
+                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-white text-[#306a3b] shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            {/* ========================================================= */}
+            {/* SECTION B: 3 ZIG-ZAG FEATURE SECTIONS (#cara-kerja) */}
+            {/* ========================================================= */}
+            <section className="w-full pt-24 md:pt-32 pb-16 flex flex-col" id="cara-kerja">
+              
+              {/* Row 1: Gizi Per Individu, Cukup Masak Sekali */}
+              <div className="w-full bg-[#fff8f7] py-12 md:py-16">
+                <div className="max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+                  
+                  {/* Content Kiri */}
+                  <div className="lg:col-span-6 flex flex-col gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#b2f2b6] flex items-center justify-center text-[#306a3b]">
+                      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                      </svg>
+                    </div>
+                    <span className="text-[12px] uppercase tracking-wider text-[#466800] font-bold">
+                      1 Masakan Untuk Seluruh Rumah
+                    </span>
+                    <h2 className="text-[30px] sm:text-[36px] font-bold text-[#2c1514] leading-tight">
+                      Gizi Per Individu, Cukup Masak Sekali
+                    </h2>
+                    <p className="text-[15px] text-[#5e5e5f] leading-relaxed">
+                      Satu menu keluarga yang sama, namun porsi dan kecukupan gizinya dihitung spesifik untuk tiap anggota (balita &gt;2 tahun, anak sekolah, ibu hamil, dewasa, hingga lansia). Tanpa kelelahan menyiapkan menu terpisah tiap jam makan.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleSwitchToApp}
+                        className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold text-[#306a3b] bg-[#ffe9e7] hover:bg-[#b2f2b6] transition-colors"
+                      >
+                        <span>LIHAT CONTOH PORSI</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Stacked Card Kanan */}
+                  <div className="lg:col-span-6 relative flex justify-center">
+                    <div className="absolute -inset-2 bg-[#ffe9e7] rounded-3xl transform rotate-2" />
+                    <div className="relative w-full rounded-3xl overflow-hidden bg-white shadow-xl">
+                      <div className="h-80 md:h-96 w-full relative">
+                        <img
+                          className="w-full h-full object-cover"
+                          alt="Indonesian family balanced meal tray containing fresh Sayur Bening Bayam Jagung, grilled fish, tempeh bacem"
+                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuACf4j_Bplu7ZkiKbaOU_Y3i8AnnICKnols0SaXn5NDLxEehiLnT8YTdjgZ8708BvfYsRsvEOSPGyYtTw2epoyqXnt2lCUXiuSAma5tZfIrZz3ft9M96qVUldyzHgu2-G9yWaiY2MFG-sJTTfqCNqIe2ueEZmjNbMPDXxm7QALKrEkDE5mIgQLZXVL6DsrMGtZWaX7mi36R1VZRG8atDIbwPRfNDcdDr-FGMlg0pjg"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                      </div>
+
+                      {/* Floating Badge (98% Kecukupan AKG) */}
+                      <div className="absolute top-6 right-6 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl max-w-[210px]">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="text-[12px] font-bold text-[#2c1514]">AKG Terpenuhi</span>
+                          <span className="text-[12px] font-bold text-[#466800]">98%</span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-[#ffe9e7] overflow-hidden">
+                          <div className="h-full bg-[#6da003] w-[98%] rounded-full" />
+                        </div>
+                        <p className="text-[11px] text-[#5e5e5f] mt-2">Zat Besi, Protein &amp; Zinc terbagi proporsional</p>
+                      </div>
+
+                      {/* Bottom Floating Badge */}
+                      <div className="p-5 bg-white flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-[#466800]/10 flex items-center justify-center text-[#466800]">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <span className="text-[13px] text-[#2c1514] font-semibold block">Hitungan Baku Kemenkes</span>
+                            <span className="text-[12px] text-[#5e5e5f]">Algoritma non-generatif presisi</span>
+                          </div>
+                        </div>
+                        <Link href="/tentang" className="text-[12px] text-[#466800] font-bold hover:underline">
+                          Lihat Cara Hitung
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Row 2: Budget-First dengan Harga Pasar Lokal */}
+              <div className="w-full bg-[#ffe9e7] py-12 md:py-16">
+                <div className="max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+                  
+                  {/* Visual Kiri */}
+                  <div className="lg:col-span-6 order-2 lg:order-1 relative flex justify-center">
+                    <div className="absolute -inset-2 bg-[#ffe2df] rounded-3xl transform -rotate-2" />
+                    <div className="relative w-full rounded-3xl overflow-hidden bg-white shadow-xl">
+                      <div className="h-80 md:h-96 w-full relative">
+                        <img
+                          className="w-full h-full object-cover"
+                          alt="Authentic colorful Indonesian traditional market fresh vegetables, tofu, tempeh"
+                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtlQJhKo7F1BKPdNHj2amAogvdGpswpkAYZMSd_bK0TwHv517tyWDJ-KqE-KhhsrAz9O3p-Aco8pWotD9SrafRbPRpb5aJtpG2lE3gR7G3kiIrDiacaN2st1xTHEo45nmxW0j_M-wHMcMyZlVqZy7u7TKzSCf05LJZ3jG7hxXjkopXFr9O3A0DyY-htze35emwxsFrzldvkeuodZtZWcgPGbDUaQZH5NgZzv-lI9A"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                      </div>
+
+                      {/* Floating Badge Kiri Bawah */}
+                      <div className="absolute bottom-6 left-6 right-6 md:right-auto bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#306a3b] text-white flex items-center justify-center shrink-0">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <span className="text-[18px] font-bold text-[#2c1514] block leading-tight">Rp 35.000 / Hari</span>
+                          <span className="text-[12px] text-[#5e5e5f]">Estimasi Nyata Harga Pasar Tradisional</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Content Kanan */}
+                  <div className="lg:col-span-6 order-1 lg:order-2 flex flex-col gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#b2f2b6] flex items-center justify-center text-[#306a3b]">
+                      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                    </div>
+                    <span className="text-[12px] uppercase tracking-wider text-[#466800] font-bold">
+                      Rasio Gizi Maksimal vs Kantong Aman
+                    </span>
+                    <h2 className="text-[30px] sm:text-[36px] font-bold text-[#2c1514] leading-tight">
+                      Budget-First dengan Harga Pasar Lokal
+                    </h2>
+                    <p className="text-[15px] text-[#5e5e5f] leading-relaxed">
+                      Masukkan budget harian atau mingguan Ibu, dan sistem menyusun menu terbaik dalam batas tersebut. Harga bahan dapat disesuaikan dengan harga pasar setempat agar belanja dapur tetap terukur tanpa kompromi nutrisi.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleSwitchToApp}
+                        className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold text-[#306a3b] bg-white hover:bg-[#fff8f7] transition-colors shadow-sm"
+                      >
+                        <span>COBA SIMULASI BUDGET</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Row 3: AI Transparan & Tervalidasi Pakar Gizi */}
+              <div className="w-full bg-[#fff8f7] py-12 md:py-16" id="standar-gizi">
+                <div className="max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+                  
+                  {/* Content Kiri */}
+                  <div className="lg:col-span-6 flex flex-col gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#b2f2b6] flex items-center justify-center text-[#306a3b]">
+                      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
+                    <span className="text-[12px] uppercase tracking-wider text-[#466800] font-bold">
+                      Integritas Ilmiah Terbuka
+                    </span>
+                    <h2 className="text-[30px] sm:text-[36px] font-bold text-[#2c1514] leading-tight">
+                      AI Transparan &amp; Tervalidasi Pakar Gizi
+                    </h2>
+                    <p className="text-[15px] text-[#5e5e5f] leading-relaxed">
+                      AI hanya membantu memvariasikan resep dan rotasi menu harian. Perhitungan gramatur dan angka kecukupan nutrisi murni menggunakan rumus baku AKG Kemenkes &amp; TKPI 2017, serta telah dicek langsung oleh Ahli Gizi &amp; Kader Posyandu.
+                    </p>
+                    <div className="pt-2">
+                      <Link
+                        href="/tentang"
+                        className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold text-[#306a3b] bg-[#ffe9e7] hover:bg-[#b2f2b6] transition-colors"
+                      >
+                        <span>CEK METODOLOGI</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* Visual Kanan */}
+                  <div className="lg:col-span-6 relative flex justify-center">
+                    <div className="absolute -inset-2 bg-[#ffe9e7] rounded-3xl transform rotate-2" />
+                    <div className="relative w-full rounded-3xl overflow-hidden bg-white shadow-xl">
+                      <div className="h-80 md:h-96 w-full relative">
+                        <img
+                          className="w-full h-full object-cover"
+                          alt="Certified clinical nutritionist reviewing food portion models with health volunteers"
+                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuDw9sMjnF8ZkaXsAowNj0pyioSn4_uOs6tzdt6UFIX3D7516yqFb34vwupny3J_d86D92N57lmNNdrhIaRUtre7QqjeBKwQhcirkTrYYz_VAcyNi73AzDWvVQPbF_DunCWlY_S1CZ_n_m5z4Q91zjIcnyP5Nz4hd8TJdLw17-aK44npbMjRZgSwWx8x6EavXoB-E_Kk9RpNgo1JNDPM15SwngIq0FQKhAxMNIiA_QA"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                      </div>
+
+                      {/* Floating Card Kanan Bawah */}
+                      <div className="absolute bottom-6 right-6 left-6 md:left-auto bg-[#306a3b] text-white rounded-2xl p-4 shadow-2xl flex items-center gap-3">
+                        <svg className="w-6 h-6 text-[#bbf45e] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <span className="text-[13px] font-bold text-white block">Audit Ilmiah Terbuka</span>
+                          <span className="text-[11px] text-[#ffe9e7]">Terverifikasi Ahli Gizi &amp; Standar TKPI</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </section>
+
+            {/* ========================================================= */}
+            {/* SECTION C: ADVANTAGES BENTO GRID (#fitur) */}
+            {/* ========================================================= */}
+            <section className="w-full bg-[#fff0ef] py-16 md:py-24" id="fitur">
+              <div className="max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 flex flex-col gap-10">
+                
+                {/* Section Header */}
+                <div className="text-center max-w-2xl mx-auto flex flex-col gap-2">
+                  <span className="text-[12px] uppercase tracking-wider text-[#466800] font-bold">
+                    Ketenangan Pikiran Keluarga
+                  </span>
+                  <h2 className="text-[30px] sm:text-[36px] font-bold text-[#2c1514] tracking-tight">
+                    Keunggulan &amp; Keamanan Porsi Kita
+                  </h2>
+                  <p className="text-[15px] text-[#5e5e5f]">
+                    Dirancang dari empati terhadap keseharian orang tua Indonesia yang menginginkan gizi prima tanpa kerumitan teknis.
+                  </p>
+                </div>
+
+                {/* Bento Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  
+                  {/* Kartu Besar Kiri (cols 7): WhatsApp Share */}
+                  <div className="lg:col-span-7 bg-white rounded-3xl p-8 md:p-10 shadow-xl flex flex-col justify-between relative overflow-hidden border border-stone-200/50">
+                    <div className="flex flex-col gap-4 relative z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-[#b2f2b6] flex items-center justify-center text-[#306a3b]">
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                        </div>
+                        <span className="text-[11px] px-3 py-1 rounded-full bg-[#ffe9e7] text-[#434937] font-semibold">
+                          1-Click Share
+                        </span>
+                      </div>
+
+                      <h3 className="text-[22px] sm:text-[26px] font-bold text-[#2c1514] leading-snug">
+                        Ramah Pengguna Awam &amp; Bagikan ke WhatsApp
+                      </h3>
+                      <p className="text-[15px] text-[#5e5e5f] leading-relaxed max-w-xl">
+                        Bahasa sederhana tanpa istilah medis yang membingungkan, ukuran tombol besar, sangat hemat kuota internet, dan daftar belanja mingguan otomatis terkirim rapi ke WhatsApp keluarga dalam satu ketukan.
+                      </p>
+                    </div>
+
+                    {/* Mockup Mini WA Chat Bubble UI */}
+                    <div className="mt-8 pt-6 border-t border-stone-200/60 flex flex-col gap-3 max-w-md">
+                      <div className="self-start bg-[#ffe2df]/80 rounded-2xl rounded-tl-sm p-4 text-[#2c1514] text-[13px] shadow-xs">
+                        <p className="font-bold text-[#466800] mb-1">Daftar Belanja Porsi Kita (Rabu)</p>
+                        <p className="text-[#5e5e5f] leading-relaxed">
+                          • 2 ikat Bayam (Rp 4.000)<br />
+                          • 1 papan Tempe Segar (Rp 7.000)<br />
+                          • 500g Ikan Kembung (Rp 18.000)<br />
+                          <strong>Total: Rp 29.000</strong> (Hemat Rp 6.000 dari plafon)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Kolom Kanan (cols 5) */}
+                  <div className="lg:col-span-5 flex flex-col gap-6">
+                    
+                    {/* Kartu Kanan Atas: Privasi Data Anak */}
+                    <div className="bg-white rounded-3xl p-8 shadow-xl flex flex-col gap-3 border border-stone-200/50">
+                      <div className="w-11 h-11 rounded-2xl bg-[#b2f2b6] flex items-center justify-center text-[#306a3b]">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-[20px] font-bold text-[#2c1514]">
+                        Privasi &amp; Keamanan Data Anak Proaktif
+                      </h3>
+                      <p className="text-[14px] text-[#5e5e5f] leading-relaxed">
+                        Kami tidak meminta data identitas anak (tanpa nama lengkap, NIK, atau tanggal lahir spesifik). Cukup pilih kelompok usia dan jenis kelamin untuk perhitungan gizi.
+                      </p>
+                    </div>
+
+                    {/* Row Kanan Bawah: 2 Mini Bento Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6" id="posyandu-api">
+                      
+                      {/* Mini Card 1: Open API & Posyandu */}
+                      <div className="bg-[#ffe9e7] rounded-3xl p-6 shadow-md flex flex-col justify-between gap-3 border border-stone-200/40">
+                        <div>
+                          <span className="inline-block px-2.5 py-1 rounded-md bg-[#306a3b] text-white text-[11px] font-bold mb-3">
+                            API DOKU
+                          </span>
+                          <h4 className="text-[17px] font-bold text-[#2c1514]">
+                            Open API &amp; Posyandu
+                          </h4>
+                        </div>
+                        <p className="text-[13px] text-[#5e5e5f] leading-relaxed">
+                          Tersedia endpoint terstandarisasi untuk integrasi dashboard pemantauan gizi kader posyandu &amp; puskesmas.
+                        </p>
+                      </div>
+
+                      {/* Mini Card 2: Filter Alergi & Usia */}
+                      <div className="bg-white rounded-3xl p-6 shadow-md flex flex-col justify-between gap-3 border border-stone-200/50">
+                        <div>
+                          <div className="w-8 h-8 rounded-xl bg-[#b2f2b6] flex items-center justify-center text-[#306a3b] mb-3">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <h4 className="text-[17px] font-bold text-[#2c1514]">
+                            Filter Alergi &amp; Usia
+                          </h4>
+                        </div>
+                        <p className="text-[13px] text-[#5e5e5f] leading-relaxed">
+                          Proteksi alergen kacang, udang, telur serta batasan khusus anak di atas 2 tahun (non-MPASI).
+                        </p>
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+            </section>
+
+            {/* ========================================================= */}
+            {/* SECTION D: 3-CARD SHOWCASE SECTION (Porsi Per Anggota) */}
+            {/* ========================================================= */}
+            <section className="w-full bg-[#fff8f7] py-16 md:py-24">
+              <div className="max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 flex flex-col gap-10">
+                
+                {/* Section Header */}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                  <div className="flex flex-col gap-2 max-w-xl">
+                    <span className="text-[12px] uppercase tracking-wider text-[#466800] font-bold">
+                      Proporsi Individual Terukur
+                    </span>
+                    <h2 className="text-[30px] sm:text-[36px] font-bold text-[#2c1514] tracking-tight">
+                      Simulasi Pembagian Porsi
+                    </h2>
+                  </div>
+                  <p className="text-[15px] text-[#5e5e5f] max-w-md">
+                    Dari wajan yang sama, piring tiap anggota keluarga mendapatkan takaran gramatur mikro &amp; makronutrien yang tepat sasaran.
+                  </p>
+                </div>
+
+                {/* 3 Kartu Vertikal Berdampingan */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch pt-4">
+                  
+                  {/* Kartu 1: Balita & Anak */}
+                  <div className="bg-white rounded-3xl p-7 shadow-xl flex flex-col justify-between transition-transform duration-200 hover:-translate-y-1 border border-stone-200/50">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <span className="px-3.5 py-1 rounded-full bg-[#ffe9e7] text-[#434937] text-[11px] font-semibold">
+                          Usia &gt;2 - 12 Thn
+                        </span>
+                        <span className="text-[12px] font-bold text-[#306a3b]">0.50 - 0.75 Porsi</span>
+                      </div>
+                      <div className="h-48 w-full rounded-2xl overflow-hidden relative">
+                        <img
+                          className="w-full h-full object-cover"
+                          alt="Child portion plate with soft steamed rice, tofu cubes, chicken breast and sweet corn"
+                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-YhGpAJ2DPtXVF-gwECegSGwR3SHJlfumiqL_WKq24CVArOsCDhnUq-klKgpE-ywrDazyrHOyXXO40j80c9PjKKhVs6N0n4-GRyJhjXS88UcMG8P4OOBDzaFqvISaNAs7UNiSmVcYtBYKVnUN3zQBozd_DsyjyTLoXuLf6XSquoUPSBlohG7kwEHALdi79QiYeAIl4XGB8O1nbxYIGp3xMmFzyA0mpHaTXxpGfxU"
+                        />
+                      </div>
+                      <h3 className="text-[20px] font-bold text-[#2c1514]">Porsi Balita &amp; Anak</h3>
+                      <p className="text-[14px] text-[#5e5e5f] leading-relaxed">
+                        Fokus pada kepadatan protein hewani &amp; nabati serta zinc untuk dukung masa emas tumbuh kembang optimal (di luar MPASI &lt;2 tahun).
+                      </p>
+                    </div>
+                    <div className="pt-6">
+                      <button
+                        type="button"
+                        onClick={handleSwitchToApp}
+                        className="w-full py-3.5 rounded-full bg-[#306a3b] hover:bg-[#25522d] text-white text-[13px] font-semibold transition-colors flex items-center justify-center gap-2"
+                      >
+                        <span>LIHAT DETAIL</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Kartu 2: Ibu Hamil & Menyusui (Highlighted Center #306a3b) */}
+                  <div className="bg-[#306a3b] text-white rounded-3xl p-7 shadow-2xl flex flex-col justify-between transform lg:-translate-y-4 z-10 transition-transform duration-200">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <span className="px-3.5 py-1 rounded-full bg-[#6da003] text-white text-[11px] font-bold">
+                          Prioritas Gizi Khusus
+                        </span>
+                        <span className="text-[12px] font-bold text-[#bbf45e]">1.00 Porsi + Tambahan</span>
+                      </div>
+                      <div className="h-48 w-full rounded-2xl overflow-hidden relative">
+                        <img
+                          className="w-full h-full object-cover"
+                          alt="Maternal nutrition plate featuring grilled fish rich in omega 3, dark spinach, boiled egg"
+                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHuhF52kt3OZ7XNQ70Jv8rL29tzjJt6CfIqfUDG-4Rj16EHEaIx3owKvSQ-n_Nhn9cHYjLYaCKFB6CNc1B467HT53XZ0T58xwvdG48k2V_C4Fk-Kq97ZIalEfsWu2PPkS5aUjj40INye_H6Q8a-VZmlCe-DRASEvQeeCUcirRafsCxYFQOc0CI2EE068EkPXd8vuGTunmcqSDnq6oPFv-hm5FSIezAx3kn_KpuSlE"
+                        />
+                        <div className="absolute inset-0 bg-[#306a3b]/20" />
+                      </div>
+                      <h3 className="text-[20px] font-bold text-white">Porsi Ibu Hamil &amp; Menyusui</h3>
+                      <p className="text-[14px] text-[#ffe9e7] leading-relaxed">
+                        Tambahan kebutuhan zat besi, asam folat, kalsium, dan kalori terukur dari menu masakan yang sama tanpa ribet masak terpisah di dapur.
+                      </p>
+                    </div>
+                    <div className="pt-6">
+                      <button
+                        type="button"
+                        onClick={handleSwitchToApp}
+                        className="w-full py-3.5 rounded-full bg-[#6da003] hover:bg-[#466800] text-white text-[13px] font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-lg"
+                      >
+                        <span>LIHAT DETAIL</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Kartu 3: Dewasa & Lansia */}
+                  <div className="bg-white rounded-3xl p-7 shadow-xl flex flex-col justify-between transition-transform duration-200 hover:-translate-y-1 border border-stone-200/50">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <span className="px-3.5 py-1 rounded-full bg-[#ffe9e7] text-[#434937] text-[11px] font-semibold">
+                          Dewasa &amp; Lansia
+                        </span>
+                        <span className="text-[12px] font-bold text-[#306a3b]">1.00 - 1.25 Porsi</span>
+                      </div>
+                      <div className="h-48 w-full rounded-2xl overflow-hidden relative">
+                        <img
+                          className="w-full h-full object-cover"
+                          alt="Adult healthy Indonesian plate focusing on fiber, chayote squash, grilled tofu, fresh fish"
+                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVwI0BbocpSDt44jiTCiuXJ67Fy0qfI1pGm7pjWGQOyJssmmTQ8jlpacgC2faihrZQmEQKXhsfxBenRQyUFSfziBh745IVQC7GqubAeE_TUz71ZD4tP-pxfpUtU4nLbDt_6dTmsZ5EK8ql6wGdWySBkOJPD9qt_-JdQ_fn4NWxBZLDwq0dFTA0Xs1vi1idqIvTLbdXOc_Jyb8dnAKAFk-OM9KQX7cAfYI41OJ8moY"
+                        />
+                      </div>
+                      <h3 className="text-[20px] font-bold text-[#2c1514]">Porsi Dewasa &amp; Lansia</h3>
+                      <p className="text-[14px] text-[#5e5e5f] leading-relaxed">
+                        Takaran seimbang kaya serat alami, kontrol natrium &amp; gula, serta opsi tekstur ramah kunyah dengan filter alergi keluarga terintegrasi.
+                      </p>
+                    </div>
+                    <div className="pt-6">
+                      <button
+                        type="button"
+                        onClick={handleSwitchToApp}
+                        className="w-full py-3.5 rounded-full bg-[#306a3b] hover:bg-[#25522d] text-white text-[13px] font-semibold transition-colors flex items-center justify-center gap-2"
+                      >
+                        <span>LIHAT DETAIL</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </section>
+
+            {/* ========================================================= */}
+            {/* SECTION E: BOTTOM STATS BANNER & MEDICAL DISCLAIMER */}
+            {/* ========================================================= */}
+            <section className="w-full bg-[#fff8f7] py-16 md:py-24" id="kontak">
+              <div className="max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12 flex flex-col">
+                
+                {/* Banner Gelap Circular Stats (#306a3b) */}
+                <div className="w-full bg-[#306a3b] text-white rounded-3xl p-8 md:p-14 shadow-2xl relative overflow-hidden">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-6 relative z-10 text-center">
+                    
+                    {/* 1. Lingkaran 100% */}
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="relative w-24 h-24 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                          <path className="text-white/20" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+                          <path className="text-[#6da003]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="100, 100" strokeLinecap="round" strokeWidth="3" />
+                        </svg>
+                        <span className="absolute text-[24px] font-bold text-white">100%</span>
+                      </div>
+                      <span className="text-[13px] font-semibold text-white max-w-[160px]">
+                        Berbasis Data AKG &amp; TKPI
+                      </span>
+                    </div>
+
+                    {/* 2. Lingkaran 1x */}
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="relative w-24 h-24 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                          <path className="text-white/20" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+                          <path className="text-[#6da003]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="100, 100" strokeLinecap="round" strokeWidth="3" />
+                        </svg>
+                        <span className="absolute text-[24px] font-bold text-white">1x</span>
+                      </div>
+                      <span className="text-[13px] font-semibold text-white max-w-[160px]">
+                        Masak Sekali untuk Sekeluarga
+                      </span>
+                    </div>
+
+                    {/* 3. Lingkaran >2 Thn */}
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="relative w-24 h-24 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                          <path className="text-white/20" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+                          <path className="text-[#6da003]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="85, 100" strokeLinecap="round" strokeWidth="3" />
+                        </svg>
+                        <span className="absolute text-[24px] font-bold text-white">&gt;2 Th</span>
+                      </div>
+                      <span className="text-[13px] font-semibold text-white max-w-[160px]">
+                        Batas Aman Usia (Non-MPASI)
+                      </span>
+                    </div>
+
+                    {/* 4. Lingkaran 0 */}
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="relative w-24 h-24 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                          <path className="text-white/20" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+                          <path className="text-[#6da003]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="10, 100" strokeLinecap="round" strokeWidth="3" />
+                        </svg>
+                        <span className="absolute text-[24px] font-bold text-white">0</span>
+                      </div>
+                      <span className="text-[13px] font-semibold text-white max-w-[160px]">
+                        Data Identitas Anak Dikumpulkan
+                      </span>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Medical Disclaimer Box */}
+                <div className="mt-8 bg-[#ffe9e7] rounded-2xl p-6 shadow-xs flex items-start gap-4 border border-stone-200/50">
+                  <div className="w-8 h-8 rounded-full bg-[#306a3b]/10 flex items-center justify-center text-[#306a3b] shrink-0 mt-0.5">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[12px] text-[#2c1514] font-bold uppercase tracking-wider">
+                      Pernyataan Medis &amp; Batasan Produk
+                    </span>
+                    <p className="text-[13px] text-[#5e5e5f] leading-relaxed">
+                      Porsi Kita adalah alat bantu perencanaan menu dan anggaran keluarga sehari-hari, bukan pengganti saran, diagnosis, atau perawatan medis profesional. Saat ini perhitungan porsi dikhususkan untuk anggota keluarga berusia di atas 2 tahun dan belum mencakup aturan MPASI untuk bayi di bawah 2 tahun.
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            </section>
+
+          </div>
+        </main>
+
+        {/* ========================================================= */}
+        {/* FOOTER RESMI (5-Column Layout Sesuai Desain) */}
+        {/* ========================================================= */}
+        <footer className="w-full bg-[#fff0ef] text-[#434937] py-14 shadow-[0_-1px_6px_rgba(0,0,0,0.02)] border-t border-stone-200/60">
+          <div className="max-w-[1280px] mx-auto px-5 md:px-8 lg:px-12">
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-12">
+              
+              {/* Brand Column (cols 2) */}
+              <div className="lg:col-span-2 flex flex-col gap-4">
+                <span className="text-[20px] uppercase text-[#466800] font-bold tracking-tight">
+                  PORSI KITA
+                </span>
+                <p className="text-[14px] text-[#434937] max-w-sm leading-relaxed">
+                  Platform kurasi gizi presisi dan perencanaan porsi keluarga. Mengubah rutinitas nutrisi domestik menjadi ikhtiar sehat yang terukur, penuh rasa, dan berkelanjutan.
+                </p>
+
+                {/* Social / Contact Icons */}
+                <div className="flex items-center gap-3 pt-1">
+                  <a
+                    aria-label="Instagram"
+                    href="https://instagram.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-10 h-10 rounded-full bg-[#ffe9e7] flex items-center justify-center text-[#466800] hover:bg-[#6da003] hover:text-white transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </a>
+                  <a
+                    aria-label="Community"
+                    href="#"
+                    className="w-10 h-10 rounded-full bg-[#ffe9e7] flex items-center justify-center text-[#466800] hover:bg-[#6da003] hover:text-white transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </a>
+                  <a
+                    aria-label="Email"
+                    href="mailto:halo@porsikita.id"
+                    className="w-10 h-10 rounded-full bg-[#ffe9e7] flex items-center justify-center text-[#466800] hover:bg-[#6da003] hover:text-white transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+
+              {/* Col 2: Produk */}
+              <div className="flex flex-col gap-2.5">
+                <span className="text-[13px] text-[#2c1514] font-bold tracking-wide uppercase">
+                  Produk
+                </span>
+                <a href="#cara-kerja" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Cara Kerja
+                </a>
+                <a href="#standar-gizi" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Standar Gizi
+                </a>
+                <a href="#fitur" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Fitur Perencana
+                </a>
+                <a href="#posyandu-api" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Integrasi Posyandu
+                </a>
+              </div>
+
+              {/* Col 3: Ekosistem */}
+              <div className="flex flex-col gap-2.5">
+                <span className="text-[13px] text-[#2c1514] font-bold tracking-wide uppercase">
+                  Ekosistem
+                </span>
+                <a href="#posyandu-api" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Dokumentasi API
+                </a>
+                <Link href="/panduan" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Pusat Bantuan
+                </Link>
+                <Link href="/tentang" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Kemitraan Nakes
+                </Link>
+                <a href="#kontak" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Hubungi Kami
+                </a>
+              </div>
+
+              {/* Col 4: Legalitas */}
+              <div className="flex flex-col gap-2.5">
+                <span className="text-[13px] text-[#2c1514] font-bold tracking-wide uppercase">
+                  Legalitas
+                </span>
+                <Link href="/privasi" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Kebijakan Privasi
+                </Link>
+                <Link href="/privasi" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Syarat &amp; Ketentuan
+                </Link>
+                <Link href="/tentang" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Keamanan Data Gizi
+                </Link>
+                <Link href="/panduan" className="text-[13px] text-[#434937] hover:text-[#466800] transition-colors">
+                  Pedoman Klinis
+                </Link>
+              </div>
+
+            </div>
+
+            {/* Bottom Copyright */}
+            <div className="pt-8 border-t border-stone-200/60 flex flex-col md:flex-row items-center justify-between gap-4 text-[13px] text-[#434937]">
+              <p>© 2025 Porsi Kita. Hak Cipta Dilindungi Undang-Undang.</p>
+              <p className="text-[11px] text-[#737a65]">
+                Dirancang untuk ketahanan gizi keluarga &amp; pencegahan stunting nasional.
+              </p>
+            </div>
+
+          </div>
+        </footer>
+
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: TAMPILAN UTAMA / DASHBOARD KELUARGA (Figma Reference)
+  // =========================================================================
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center pb-28 md:pb-16 selection:bg-[#9CD934]/30">
+      
+      {/* Switcher bar untuk kenyamanan navigasi / review */}
+      <div className="w-full max-w-6xl px-4 sm:px-6 pt-3 pb-2 flex justify-between items-center text-[11px] text-[#7E7E7E]">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#85B620]" />
+          <span className="font-semibold text-[#0D0807]">Mode Dashboard Keluarga</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <button
+          type="button"
+          onClick={handleSwitchToLanding}
+          className="text-[#143118] hover:text-[#85B620] font-semibold hover:underline flex items-center gap-1 transition"
+        >
+          Lihat Beranda Publik →
+        </button>
+      </div>
+
+      {/* Main Container */}
+      <div className="w-full max-w-6xl px-4 sm:px-6 flex flex-col min-h-screen">
+        
+        {/* HEADER UTAMA */}
+        <header className="py-4 flex items-center justify-between border-b border-stone-200/60 md:border-none">
+          <div className="flex items-center gap-3">
+            <BrandLogo size={42} showAsterisk={false} />
+
+            <div>
+              <h1 className="text-[20px] sm:text-[24px] font-bold text-[#0D0807] leading-tight">
+                Halo {keluarga.alias.replace('Keluarga ', '')}! 👋
+              </h1>
+              <p className="text-[12px] sm:text-[13px] text-[#7E7E7E] mt-0.5 leading-tight">
+                Mau makan apa hari ini?
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 sm:gap-4">
+            {/* Lonceng Notifikasi */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowNotification(!showNotification)}
+                style={{
+                  backgroundColor: '#9CD934',
+                  boxShadow: '0 0 0 2px #85B620',
+                }}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white transition active:scale-95"
+                title="Notifikasi Menu"
+                aria-label="Notifikasi"
+              >
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  />
+                </svg>
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-white border border-[#85B620]" />
+              </button>
+
+              {showNotification && (
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl p-4 shadow-xl border border-stone-200 z-30 text-xs">
+                  <div className="font-bold text-[#0D0807] mb-1">Notifikasi Dapur</div>
+                  <p className="text-[#7E7E7E] leading-relaxed">
+                    Menu hari ini telah disesuaikan dengan kebutuhan AKG seluruh anggota keluarga Bu Sari.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Avatar Pengguna */}
+            <Link
+              href="/keluarga"
+              className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center overflow-hidden border border-stone-300 shadow-2xs hover:opacity-90 transition"
+            >
+              <span className="font-bold text-xs text-[#0D0807]">
+                {keluarga.alias.slice(0, 2).toUpperCase()}
+              </span>
+            </Link>
+          </div>
+        </header>
+
+        {/* LAYOUT KONTEN DASHBOARD: 2 Kolom Seimbang */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 pt-2">
+          
+          {/* SISI KIRI (lg:col-span-5): Kartu Keuangan & Riwayat Transaksi */}
+          <div className="lg:col-span-5 space-y-6">
+            
+            {/* Kartu Keuangan */}
+            <section>
+              <div className="w-full bg-[#0D0807] rounded-[20px] p-5 text-white shadow-md flex flex-col justify-between min-h-[140px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[16px] font-semibold text-stone-200">
+                    Keuangan Dapur
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setActiveFinanceTab('pemasukan')}
+                      style={{
+                        backgroundColor: activeFinanceTab === 'pemasukan' ? '#85B620' : 'transparent',
+                        color: activeFinanceTab === 'pemasukan' ? '#FFFFFF' : '#858585',
+                      }}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition min-h-[26px] flex items-center gap-0.5"
+                    >
+                      <span>+</span> Pemasukan
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveFinanceTab('pengeluaran')}
+                      style={{
+                        backgroundColor: activeFinanceTab === 'pengeluaran' ? '#85B620' : 'transparent',
+                        color: activeFinanceTab === 'pengeluaran' ? '#FFFFFF' : '#858585',
+                      }}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition min-h-[26px] flex items-center gap-0.5"
+                    >
+                      <span>−</span> Pengeluaran
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <div className="text-[32px] sm:text-[36px] font-bold text-white tabular-nums tracking-tight leading-none">
+                    Rp{saldoDisplay.toLocaleString('id-ID')}
+                  </div>
+                  <span className="text-[11px] text-stone-400 mt-1.5 block">
+                    {activeFinanceTab === 'pemasukan'
+                      ? 'Alokasi budget dapur mingguan (Rp85.000 / hari)'
+                      : 'Estimasi belanja bahan 7 hari (Pasti terkunci dalam anggaran)'}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            {/* Riwayat Transaksi */}
+            <section className="bg-white rounded-[24px] p-5 border border-stone-200/80 shadow-2xs">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-[18px] sm:text-[20px] font-bold text-[#0D0807] tracking-tight">
+                  Riwayat &amp; Jadwal Masak
+                </h2>
+                <Link
+                  href="/menu"
+                  className="text-[12px] font-semibold text-[#143118] hover:text-[#85B620] hover:underline flex items-center gap-1 transition"
+                >
+                  Lihat menu 7 hari →
+                </Link>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/60 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="w-9 h-9 rounded-xl bg-[#85B620]/15 text-[#143118] flex items-center justify-center font-bold text-sm shrink-0">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                    </span>
+                    <div>
+                      <strong className="text-[#0D0807] font-semibold text-[13px] block">Estimasi Belanja 7 Hari</strong>
+                      <span className="text-[#7E7E7E] text-[11px]">Bahan pasar (BDD terhitung)</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[#0D0807] font-bold tabular-nums text-[13px] block">
+                      -Rp{totalBiayaMenu.toLocaleString('id-ID')}
+                    </span>
+                    <span className="text-[#85B620] text-[10px] font-bold">Terkonfirmasi</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/60 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="w-9 h-9 rounded-xl bg-stone-200 text-[#0D0807] flex items-center justify-center font-bold text-sm shrink-0">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                    </span>
+                    <div>
+                      <strong className="text-[#0D0807] font-semibold text-[13px] block">Masak Hari Ini (3 Waktu Makan)</strong>
+                      <span className="text-[#7E7E7E] text-[11px]">
+                        {rencanaMenu?.hari[0]?.sesi_makan.pagi.hidangan[0]?.nama || 'Nasi & Sayur'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[#0D0807] font-bold tabular-nums text-[13px] block">
+                      -Rp{(rencanaMenu?.hari[0]?.total_biaya_hari_rp || 27000).toLocaleString('id-ID')}
+                    </span>
+                    <Link href="/menu/plan/hari/1" className="text-[#143118] text-[11px] font-bold underline hover:text-[#85B620] transition">
+                      Buka Resep
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+          </div>
+
+          {/* SISI KANAN (lg:col-span-7): Panel Profil Gizi Keluarga */}
+          <div className="lg:col-span-7">
+            <section
+              style={{
+                background: 'linear-gradient(180deg, #143118 0%, #28542E 100%)',
+              }}
+              className="rounded-[28px] sm:rounded-[36px] p-5 sm:p-7 shadow-lg min-h-[460px] flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between pb-4 sm:pb-6">
+                  <div>
+                    <h2 className="text-[22px] sm:text-[26px] font-bold text-white tracking-tight leading-tight">
+                      Profil Gizi Keluarga
+                    </h2>
+                    <span className="text-[12px] text-stone-300">
+                      {anggotaList.length} anggota terdaftar • Rujukan Permenkes 28/2019
+                    </span>
+                  </div>
+
+                  <Link
+                    href="/keluarga"
+                    className="px-4 py-2 rounded-full bg-[#F8F9FA] hover:bg-white text-[#0D0807] font-semibold text-[12px] shadow-sm active:scale-95 transition"
+                  >
+                    Kelola
+                  </Link>
+                </div>
+
+                <div className="space-y-3">
+                  {anggotaList.map((a) => {
+                    const akg = hitungKebutuhan(a);
+
+                    return (
+                      <div
+                        key={a.id}
+                        className="w-full bg-[#F8F9FA] rounded-[20px] sm:rounded-[24px] p-4 flex flex-col justify-between shadow-xs transition hover:shadow-sm"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-stone-200 text-[#0D0807] font-bold text-[13px] flex items-center justify-center shrink-0">
+                              {a.alias.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-[15px] text-[#0D0807] leading-tight">
+                                {a.alias}
+                              </h3>
+                              <span className="text-[11px] font-medium text-[#7E7E7E] block mt-0.5">
+                                {a.usia_tahun} tahun · {a.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
+                                {a.status !== 'umum' && ` · ${a.status.toUpperCase()}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className="text-[12px] font-bold bg-white px-3 py-1 rounded-full text-[#0D0807] shadow-2xs border border-stone-200/50">
+                            {akg.energi_kcal} kkal/hari
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] pt-2.5 border-t border-stone-200 mt-2.5">
+                          <span className="text-[#0D0807]/90">
+                            Zat Besi: <strong>{akg.zat_besi_mg}mg</strong> · Kalsium: <strong>{akg.kalsium_mg}mg</strong>
+                          </span>
+                          {a.alergen && a.alergen.length > 0 && (
+                            <span className="text-rose-900 font-bold bg-rose-100 px-2 py-0.5 rounded-md text-[10px]">
+                              Alergi: {a.alergen.join(', ')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3">
+                <Link
+                  href="/keluarga/anggota/baru"
+                  className="w-full py-3.5 rounded-[18px] border border-white/30 bg-white/10 text-white font-semibold text-[13px] flex items-center justify-center gap-1.5 hover:bg-white/20 transition active:scale-[0.99]"
+                >
+                  <span>+</span> Tambah Anggota Keluarga Baru
+                </Link>
+              </div>
+            </section>
+          </div>
+
         </div>
-      </main>
+      </div>
+
+      <BottomNav />
     </div>
   );
 }

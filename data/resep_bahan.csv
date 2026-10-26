@@ -1,0 +1,81 @@
+Kode_Resep,Kode_TKPI,Nama_Bahan,Jumlah_Gram
+RSP001,AR001,Beras giling,100
+RSP002,AR001,Beras giling,75
+RSP002,CD001,Daging ayam,40
+RSP002,DG001,Bayam hijau,30
+RSP002,MG001,Minyak goreng,5
+RSP003,CD001,Daging ayam,75
+RSP003,DG012,Wortel,50
+RSP003,BW001,Bawang merah,5
+RSP003,BW002,Bawang putih honan,5
+RSP003,MG001,Minyak goreng,5
+RSP004,CD005,Hati ayam,75
+RSP004,BW001,Bawang merah,5
+RSP004,BW002,Bawang putih honan,5
+RSP004,MG001,Minyak goreng,5
+RSP004,GL001,Gula pasir konsumsi,5
+RSP004,MK001,Kecap manis,10
+RSP005,CE001,Telur ayam ras,55
+RSP005,DG001,Bayam hijau,30
+RSP005,BW001,Bawang merah,3
+RSP005,MG001,Minyak goreng,5
+RSP006,CF001,Ikan kembung,80
+RSP006,BW001,Bawang merah,5
+RSP006,BW002,Bawang putih honan,5
+RSP006,CB001,Cabai merah keriting,5
+RSP007,CF015,Ikan lele,100
+RSP007,BW002,Bawang putih honan,5
+RSP007,MG001,Minyak goreng,10
+RSP008,CD010,Daging sapi,70
+RSP008,DG012,Wortel,40
+RSP008,BW001,Bawang merah,5
+RSP008,BW002,Bawang putih honan,5
+RSP008,MG001,Minyak goreng,5
+RSP009,BH002,Tempe kedelai murni,50
+RSP009,BW001,Bawang merah,5
+RSP009,BW002,Bawang putih honan,3
+RSP009,GL001,Gula pasir konsumsi,5
+RSP009,MG001,Minyak goreng,5
+RSP009,MK001,Kecap manis,10
+RSP010,BH001,Tahu,80
+RSP010,BW001,Bawang merah,5
+RSP010,GL001,Gula pasir konsumsi,10
+RSP010,MK001,Kecap manis,10
+RSP010,BW002,Bawang putih honan,3
+RSP010,MG001,Minyak goreng,5
+RSP011,BH001,Tahu,60
+RSP011,CD001,Daging ayam,30
+RSP011,CE001,Telur ayam ras,10
+RSP011,BW002,Bawang putih honan,3
+RSP011,BW001,Bawang merah,3
+RSP011,MG001,Minyak goreng,8
+RSP012,BH002,Tempe kedelai murni,60
+RSP012,AR005,Tepung terigu,15
+RSP012,BW002,Bawang putih honan,3
+RSP012,MG001,Minyak goreng,10
+RSP013,DG001,Bayam hijau,100
+RSP013,BW001,Bawang merah,5
+RSP013,DG030,Jagung manis,30
+RSP014,DG020,Kelor (daun),75
+RSP014,BW001,Bawang merah,5
+RSP015,DG005,Kangkung,100
+RSP015,MK002,Tauco,10
+RSP015,BW002,Bawang putih honan,3
+RSP015,BW001,Bawang merah,3
+RSP015,MG001,Minyak goreng,5
+RSP016,DG012,Wortel,50
+RSP016,DG008,Buncis,40
+RSP016,BW001,Bawang merah,5
+RSP016,BW002,Bawang putih honan,3
+RSP017,DG001,Bayam hijau,80
+RSP017,BH001,Tahu,50
+RSP017,BW001,Bawang merah,5
+RSP017,BW002,Bawang putih honan,3
+RSP017,MG001,Minyak goreng,5
+RSP018,DB001,Pisang ambon,100
+RSP019,DB010,Pepaya,100
+RSP020,GD001,Susu sapi segar,206
+RSP025,AR001,Beras giling,50
+RSP025,CD005,Hati ayam,35
+RSP025,DG020,Kelor (daun),25
+RSP025,MG001,Minyak goreng,5

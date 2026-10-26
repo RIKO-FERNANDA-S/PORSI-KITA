@@ -1,0 +1,28 @@
+Kode_TKPI,Nama_Bahan,Satuan,Gram_per_Satuan,Harga_Rp,Harga_per_100g_Rp,Sumber_Harga,Jenis_Sumber,Tanggal_Update,Catatan
+AR001,Beras giling (Medium),kg,1000,13500.0,1350.0,PIHPS BI (Jawa Timur),Resmi,2026-10-19,Harga rata-rata pasar tradisional Surabaya
+FR005,Daging ayam ras,kg,1000,36500.0,3650.0,Panel Harga Bapanas,Resmi,2026-10-19,Harga eceran daging ayam ras segar
+FR026,Daging sapi (Kualitas 2),kg,1000,115000.0,11500.0,PIHPS BI (Jawa Timur),Resmi,2026-10-19,Harga pasar tradisional Jawa Timur
+HR002,Telur ayam ras,kg,1000,28000.0,2800.0,Panel Harga Bapanas,Resmi,2026-10-19,Harga eceran nasional/Surabaya
+GR050,Ikan kembung,kg,1000,38000.0,3800.0,Panel Harga Bapanas,Resmi,2026-10-19,Komoditas pangan strategis Bapanas
+GR007,Ikan bandeng,kg,1000,34000.0,3400.0,Panel Harga Bapanas,Resmi,2026-10-19,Harga eceran rata-rata Bapanas
+KR012,Minyak goreng kemasan sederhana,liter,920,16500.0,1793.48,PIHPS BI (Jawa Timur),Resmi,2026-10-19,Minyakita / Kemasan Sederhana
+MP007,Gula pasir konsumsi,kg,1000,17500.0,1750.0,Panel Harga Bapanas,Resmi,2026-10-19,Harga eceran rata-rata
+NR007,Bawang merah,kg,1000,28500.0,2850.0,PIHPS BI (Jawa Timur),Resmi,2026-10-19,Pasar Tradisional Jawa Timur
+NR008,Bawang putih honan,kg,1000,38000.0,3800.0,PIHPS BI (Jawa Timur),Resmi,2026-10-19,Pasar Tradisional Jawa Timur
+NR014,Cabai merah keriting,kg,1000,32000.0,3200.0,Panel Harga Bapanas,Resmi,2026-10-19,Harga eceran rata-rata Bapanas
+FR007,Hati ayam segar,kg,1000,25000.0,2500.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Pasar Keputran / Segari Surabaya
+GR046,Ikan mas,kg,1000,26000.0,2600.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,"Harga IKAN LELE dari survei, belum diganti ke harga ikan mas | Harga lapak pedagang ikan lokal"
+CP061,Tahu putih,kg,1000,12000.0,1200.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Konversi per kg dari papan/potongan
+CP077,Tempe kedelai murni,kg,1000,14000.0,1400.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Konversi per kg dari papan tempe
+DR008,Bayam hijau,kg,1000,10000.0,1000.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Setara Rp 2.500 / ikat (±250g)
+DR100,Kangkung,kg,1000,8000.0,800.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Setara Rp 2.000 / ikat (±250g)
+DR166,Wortel,kg,1000,14000.0,1400.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Pasar Wonokromo Surabaya
+DR038,Daun kelor segar,kg,1000,15000.0,1500.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Pasar tradisional / penjual sayur keliling
+ER074,Pisang ambon,kg,1000,18000.0,1800.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Harga rata-rata per kg
+ER073,Pepaya bangkok,kg,1000,10000.0,1000.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Harga eceran buah utuh
+JR006,Susu sapi segar,liter,1030,20000.0,1941.75,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Peternak lokal / Pemasok terdekat
+DR013,Buncis,kg,1000,16000.0,1600.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Harga estimasi buncis segar Jawa Timur (tidak ada di Panel Harga Bapanas)
+AR015,Jagung manis,kg,1000,12000.0,1200.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Harga estimasi jagung manis dengan kulit (Panel Harga Bapanas hanya memuat jagung tingkat peternak)
+AP025,Tepung terigu,kg,1000,11000.0,1100.0,Panel Harga Bapanas (Jawa Timur),Resmi,2026-10-19,Tepung terigu kemasan sederhana | Cek jenis: Bapanas memisahkan terigu curah dan kemasan
+NP005,Kecap manis,kg,1000,24000.0,2400.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Harga eceran kecap manis isi ulang / pouch 1 kg
+CP065,Tauco,kg,1000,20000.0,2000.0,Estimasi (Survei Pasar / App Belanja),Estimasi,2026-10-19,Harga rata-rata tauco kemasan/eceran

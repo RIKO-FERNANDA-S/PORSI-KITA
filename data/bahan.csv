@@ -1,0 +1,61 @@
+Kode_TKPI,Nama_Bahan,Kategori,Kategori_Menu,Kondisi,Energi_kcal,Protein_g,Lemak_g,Karbohidrat_g,Kalsium_mg,Zat_Besi_mg,Seng_Zinc_mg,Vitamin_A_mcg,BDD_percent,Alergen,Sumber_Data,Tipe_Nilai,Status_Verifikasi
+AR001,Beras giling,Serealia,karbo,Mentah,360,"6,8","0,7","78,9",6,"1,2","1,1",0,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CD001,Daging ayam,Daging,protein_hewani,Mentah,298,"18,2",25,0,14,"1,5","1,3",240,58,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CD005,Hati ayam,Daging/Jeroan,protein_hewani,Mentah,157,"27,4","3,8","1,6",118,"15,8","3,3",4910,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CD010,Daging sapi,Daging,protein_hewani,Mentah,201,"19,6",13,0,11,"2,8","5,2",0,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CF001,Ikan kembung,Ikan/Biota Air,protein_hewani,Mentah,125,"21,3","3,4","2,2",136,"0,8","1,4",38,80,ikan,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CF015,Ikan lele,Ikan/Biota Air,protein_hewani,Mentah,105,"14,8","4,8","0,3",20,1,"0,8",45,78,ikan,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CE001,Telur ayam ras,Telur,protein_hewani,Mentah,154,"12,4","10,8","0,7",86,3,"1,2",180,90,telur,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+BH001,Tahu,Kacang-kacangan,protein_nabati,Mentah,80,"10,9","4,7","0,8",223,5,"0,8",0,100,kedelai,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+BH002,Tempe kedelai murni,Kacang-kacangan,protein_nabati,Mentah,201,"20,8","8,8","13,5",155,4,"1,7",0,100,kedelai,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DG001,Bayam hijau,Sayuran,sayur,Mentah,16,"0,9","0,4","2,9",166,"3,5","0,4",500,71,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DG012,Wortel,Sayuran,sayur,Mentah,36,1,"0,6","7,9",45,1,"0,3",1200,88,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DG020,Kelor (daun),Sayuran,sayur,Mentah,92,"5,1","1,6","14,3",1077,6,"0,6",3000,75,,TKPI 2017,Imputasi,terisi-cek-ke-buku-TKPI
+DB001,Pisang ambon,Buah,buah,Mentah,108,1,"0,8","24,3",12,"0,6","0,2",45,75,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DB010,Pepaya,Buah,buah,Mentah,46,"0,5","0,1","12,2",23,"1,7","0,1",365,75,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+GD001,Susu sapi segar,Susu/Olahan,susu,Mentah,61,"3,2","3,5","4,3",143,"1,7","0,4",39,100,susu,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+KR012,Minyak kelapa sawit,Lemak/Minyak,lemak,Mentah,884,0,100,0,0,0,0,18181,100,,TKPI 2017,Analisis,Diperbaiki
+MP007,Gula putih,Gula,gula,Mentah,394,0,0,94,5,"0,1",0,0,100,,TKPI 2017,Analisis,Diperbaiki
+NR007,Bawang merah,Bumbu,bumbu,Mentah,46,"1,5","0,3","9,2",36,"0,8","0,2",0,90,,TKPI 2017,Analisis,Diperbaiki
+NR008,Bawang putih,Bumbu,bumbu,Mentah,112,"4,5","0,2","23,1",42,1,"0,3",0,88,,TKPI 2017,Analisis,Diperbaiki
+NR014,Cabai merah,Bumbu,bumbu,Mentah,36,1,"0,3","7,3",29,"0,5","0,2",470,85,,TKPI 2017,Analisis,Diperbaiki
+DR100,Kangkung,Sayuran,sayur,Mentah,28,"3,4","0,7","3,9",54,"2,3","0,4",2868,60,,TKPI 2017,Analisis,Diperbaiki
+DR013,Buncis,Sayuran,sayur,Mentah,34,"2,4","0,3","7,2",42,"0,7","0,3",772,90,,TKPI 2017,Analisis,Diperbaiki
+AR015,Jagung manis,Sayuran,sayur,Mentah,147,"5,1","1,3","31,5",7,"1,1","0,9",113,100,,TKPI 2017,Analisis,Diperbaiki
+AP025,Tepung terigu,Serealia,karbo,Mentah,333,9,1,"77,2",22,"1,3","2,8",0,100,gluten,TKPI 2017,Analisis,Diperbaiki
+NP005,Kecap manis,Bumbu/Saus,bumbu,Mentah,71,"5,7","1,3",9,123,"5,7",0,0,100,kedelai;gluten,TKPI 2017,Analisis,Diperbaiki
+CP065,Tauco,Bumbu/Saus,bumbu,Mentah,184,"5,5","11,4","1,9","6,9",6,1,0,100,kedelai,TKPI 2017,Analisis,Diperbaiki
+GR007,Ikan bandeng,Ikan/Biota Air,protein_hewani,Mentah,123,20,"4,8",0,20,2,"0,9",45,80,ikan,TKPI 2017,Analisis,Diperbaiki
+AR004,Beras hitam,Serealia,karbo,Mentah,351,8,"1,3","76,9",15,"1,6",0,0,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+AR009,Beras ladang,Serealia,karbo,Mentah,376,"7,5","3,8",78,20,"1,4",0,0,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+AR019,Jali,Serealia,karbo,Mentah,324,11,4,61,213,11,0,0,90,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+BR013,Kentang,Umbi Berpati,karbo,Segar,62,"2,1","0,2","13,5",58,"0,7","0,3",0,85,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+BR016,Singkong,Umbi Berpati,karbo,Segar,154,1,"0,3","36,8",77,"1,1","0,5",0,85,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+BR028,Ubi jalar kuning,Umbi Berpati,karbo,Segar,119,"0,5","0,4","25,1",30,"0,4","0,7",794,85,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CR017,Kacang kedelai,Kacang-kacangan,protein_nabati,Kering,381,"40,4","16,7","24,9",222,"3,9","1,2",0,100,kedelai,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CR014,Kacang hijau,Kacang-kacangan,protein_nabati,Kering,323,"22,9","1,5","56,8",223,"2,9","1,5",156,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CR026,Kacang merah,Kacang-kacangan,protein_nabati,Kering,314,"22,1","1,1","56,2",502,"10,3","2,2",0,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+CR032,Kacang tanah,Kacang-kacangan,protein_nabati,Kering,525,"27,9","42,7","17,4",316,"5,7","1,4",0,100,kacang,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR007,Bawang bombay,Sayuran,bumbu,Segar,43,"1,4","0,2","10,3",32,"0,5","0,4",50,94,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR010,Bit,Sayuran,sayur,Segar,41,"1,6","0,1","9,6",27,1,"0,3",0,75,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR016,Caisin,Sayuran,sayur,Segar,20,"1,7","0,4","3,4",123,"1,9","0,6",1675,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR044,Daun kubis,Sayuran,sayur,Segar,51,"2,5","1,1",8,50,"3,4","0,2",9999,75,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR064,Daun pare,Sayuran,sayur,Segar,49,"2,7",1,"8,4",217,"3,3","0,6",1800,7,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR109,Ketimun,Sayuran,sayur,Segar,8,"0,2","0,2","1,4",29,"0,8","0,1",0,55,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR126,Lobak,Sayuran,sayur,Segar,21,"0,9","0,1","4,2",26,"0,6","0,3",0,87,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR141,Sawi,Sayuran,sayur,Segar,28,"2,3","0,3",4,220,"2,9","0,7",6460,87,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR145,Selada,Sayuran,sayur,Segar,18,"1,2","0,2","2,9",22,"0,5","0,4",540,69,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR154,Terong,Sayuran,sayur,Segar,28,"1,1","0,2","5,5",15,"0,4","0,5",0,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+DR161,Tomat merah,Sayuran,sayur,Segar,24,"1,3","0,5","4,7",8,"0,6","0,4",2083,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+ER001,Alpukat,Buah,buah,Segar,85,"0,9","6,5","7,7",10,"0,9",1,189,61,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+ER004,Apel,Buah,buah,Segar,58,"0,3","0,4","14,9",10,"0,3","0,1",90,88,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+ER031,Jambu biji,Buah,buah,Segar,49,"0,9","0,3","12,2",14,"1,1","0,5",25,82,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+ER039,Jeruk manis,Buah,buah,Segar,45,"0,9","0,2","11,2",33,"0,4","0,2",160,72,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+ER054,Mangga,Buah,buah,Segar,52,"0,7",0,"12,3",16,1,"0,3",316,65,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+ER067,Melon,Buah,buah,Segar,37,"0,6","0,4","7,8",12,"0,4",0,0,"58,1",,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+ER105,Semangka,Buah,buah,Segar,28,"0,5","0,2","6,9",7,"0,2","0,3",590,46,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+FR012,Daging bebek,Daging/Unggas,protein_hewani,Segar,321,16,"28,6",0,15,"1,8",2,0,60,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+FR019,Daging kambing,Daging,protein_hewani,Segar,149,"16,6","9,2",0,11,1,5,0,100,,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+GR003,Cumi-cumi,Ikan/Biota Air,protein_hewani,Segar,75,"16,1","0,7","0,1",32,"1,8","2,5",0,100,ikan,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+GR039,Ikan layang,Ikan/Biota Air,protein_hewani,Segar,109,22,"1,7",0,50,"2,3",0,0,80,ikan,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
+GR084,Udang,Ikan/Biota Air,protein_hewani,Segar,91,21,"0,2","0,1",136,8,"3,7",4,68,udang,TKPI 2017,Analisis,terisi-cek-ke-buku-TKPI
