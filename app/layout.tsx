@@ -18,13 +18,7 @@ export default function RootLayout({
   return (
     <html lang="id" className="h-full">
       <body className="min-h-full flex flex-col bg-[#FAFAFA] text-[#0D0101] antialiased">
-        <Suspense fallback={null}>
-          <Navbar />
-        </Suspense>
         <main className="flex-1">{children}</main>
-        <Suspense fallback={null}>
-          <Footer />
-        </Suspense>
       </body>
     </html>
   );

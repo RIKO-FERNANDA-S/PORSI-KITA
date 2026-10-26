@@ -63,11 +63,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Jika sudah login dan mengakses halaman auth (/masuk atau /daftar), arahkan ke /keluarga
-  // if (user && isAuthRoute) {
-  //   const url = request.nextUrl.clone();
-  //   url.pathname = '/keluarga';
-  //   return NextResponse.redirect(url);
-  // }
+  if (user && isAuthRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/keluarga';
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }
