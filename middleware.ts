@@ -14,58 +14,76 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     '';
 
-  if (!supabaseUrl || !supabaseKey) {
-    // Jika env belum diset, lanjutkan request agar halaman demo/publik tetap berjalan
-    return supabaseResponse;
+  let hasSupabaseUser = false;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const supabase = createServerClient(supabaseUrl, supabaseKey, {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+
+            supabaseResponse = NextResponse.next({
+              request: {
+                headers: request.headers,
+              },
+            });
+
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            );
+          },
+        },
+      });
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        hasSupabaseUser = true;
+      }
+    } catch {
+      // Abaikan jika Supabase auth offline atau rate limit
+    }
   }
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+  // Periksa session cookie internal Porsi Kita
+  const sessionCookie = request.cookies.get('porsi_kita_session')?.value;
+  const hasAppSession = Boolean(sessionCookie && sessionCookie.length > 10);
 
-        supabaseResponse = NextResponse.next({
-          request: {
-            headers: request.headers,
-          },
-        });
-
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        );
-      },
-    },
-  });
-
-  // Ambil user aktif dari session cookie
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const isAuthenticated = hasAppSession || hasSupabaseUser;
 
   const { pathname } = request.nextUrl;
 
-  const isAuthRoute = pathname === '/masuk' || pathname === '/daftar' || pathname === '/login' || pathname === '/register';
-  const isProtectedRoute =
-    pathname.startsWith('/keluarga') ||
-    pathname.startsWith('/menu') ||
-    pathname.startsWith('/belanja') ||
-    pathname.startsWith('/mulai');
+  const isAuthRoute =
+    pathname === '/masuk' ||
+    pathname === '/daftar' ||
+    pathname === '/login' ||
+    pathname === '/register';
 
-  // Jika belum login dan mengakses halaman privat, arahkan ke /masuk
-  if (!user && isProtectedRoute) {
+  const isProtectedRoute =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/menu') ||
+    pathname.startsWith('/dompet') ||
+    pathname.startsWith('/belanja') ||
+    pathname.startsWith('/keluarga');
+
+  // Jika belum login dan mengakses halaman yang dilindungi
+  if (!isAuthenticated && isProtectedRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/masuk';
     url.searchParams.set('next', pathname);
     return NextResponse.redirect(url);
   }
 
-  // Jika sudah login dan mengakses halaman auth (/masuk atau /daftar), arahkan ke /keluarga
-  if (user && isAuthRoute) {
+  // Jika sudah terautentikasi dan mengakses halaman login/register utama tanpa query khusus
+  if (isAuthenticated && isAuthRoute && !request.nextUrl.searchParams.has('tab')) {
     const url = request.nextUrl.clone();
-    url.pathname = '/keluarga';
+    url.pathname = '/dashboard';
     return NextResponse.redirect(url);
   }
 

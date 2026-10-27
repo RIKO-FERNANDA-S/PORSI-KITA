@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Sidebar from '../../components/Sidebar';
@@ -61,6 +61,146 @@ export default function DashboardPage() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseNote, setExpenseNote] = useState('');
+
+  // 24-Hour Security Check States
+  const [hasPassword, setHasPassword] = useState<boolean>(true);
+  const [hasWarningBadge, setHasWarningBadge] = useState<boolean>(false);
+  const [showSecurityModal, setShowSecurityModal] = useState<boolean>(false);
+  const [isOver24Hours, setIsOver24Hours] = useState<boolean>(false);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [userProfileName, setUserProfileName] = useState('Ibu Samantha');
+
+  useEffect(() => {
+    const checkSecurityStatus = async () => {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {
+        // fallback
+      }
+
+      if (meta?.nama) {
+        setUserProfileName(meta.nama);
+      }
+
+      try {
+        const res = await fetch('/api/auth/check-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: meta?.phone || '' }),
+        });
+        const data = await res.json();
+
+        if (data.exists) {
+          if (data.alias) setUserProfileName(data.alias);
+
+          if (!data.hasPassword) {
+            setHasPassword(false);
+            setHasWarningBadge(true);
+
+            const ageHours = data.ageInHours ?? 0;
+            // Kondisi B: umur akun >= 24 jam ATAU user pernah logout setelah OTP
+            const requiresStrictPassword = ageHours >= 24 || meta?.hasLoggedOutAfterOtp === true;
+
+            if (requiresStrictPassword) {
+              setIsOver24Hours(true);
+              setShowSecurityModal(true); // Pop-up otomatis muncul di dashboard
+            } else {
+              setIsOver24Hours(false);
+              setShowSecurityModal(false); // Kondisi A: Tidak menghalangi layar, hanya badge di header
+            }
+          } else {
+            setHasPassword(true);
+            setHasWarningBadge(false);
+            setShowSecurityModal(false);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Check security status error:', err);
+      }
+
+      // Fallback lokal jika backend tidak terjangkau
+      if (meta && !meta.hasPassword) {
+        setHasPassword(false);
+        setHasWarningBadge(true);
+        const elapsed = Date.now() - (meta.verifiedAt || Date.now());
+        const ageHours = elapsed / (1000 * 60 * 60);
+        if (ageHours >= 24 || meta.hasLoggedOutAfterOtp === true) {
+          setIsOver24Hours(true);
+          setShowSecurityModal(true);
+        }
+      }
+    };
+
+    checkSecurityStatus();
+  }, []);
+
+  const handleSaveSecurityPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (newPasswordInput.length < 6) {
+      setPasswordError('Kata sandi minimal 6 karakter demi keamanan akun.');
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordError('Ulangi kata sandi baru tidak cocok.');
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    try {
+      const raw = localStorage.getItem('porsi_kita_auth_meta');
+      const meta = raw ? JSON.parse(raw) : {};
+
+      const res = await fetch('/api/auth/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: meta.phone || '',
+          newPassword: newPasswordInput,
+          confirmPassword: confirmPasswordInput,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPasswordError(data.error || 'Gagal menyimpan kata sandi.');
+        setPasswordLoading(false);
+        return;
+      }
+
+      setPasswordSuccess('Kata sandi berhasil disimpan! Akun keluarga Anda kini aman.');
+
+      if (typeof window !== 'undefined') {
+        meta.hasPassword = true;
+        delete meta.hasLoggedOutAfterOtp;
+        localStorage.setItem('porsi_kita_auth_meta', JSON.stringify(meta));
+      }
+
+      setHasPassword(true);
+      setHasWarningBadge(false);
+      setIsOver24Hours(false);
+
+      setTimeout(() => {
+        setShowSecurityModal(false);
+        setPasswordSuccess('');
+      }, 1200);
+    } catch {
+      setPasswordError('Gagal terhubung ke server.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   // Toggle checklist item
   const handleToggleCheck = (id: string) => {
@@ -172,13 +312,24 @@ export default function DashboardPage() {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#6da003]" />
             </button>
 
-            {/* Profile Avatar */}
-            <Link
-              href="/keluarga"
-              className="w-8 h-8 rounded-full bg-[#466800] text-white flex items-center justify-center font-bold text-xs shadow-xs"
-            >
-              S
-            </Link>
+            {/* Profile Avatar with Warning Badge */}
+            <div className="relative">
+              <Link
+                href="/keluarga"
+                className="w-8 h-8 rounded-full bg-[#466800] text-white flex items-center justify-center font-bold text-xs shadow-xs"
+                title={`Profil: ${userProfileName}`}
+              >
+                {userProfileName ? userProfileName.charAt(0).toUpperCase() : 'S'}
+              </Link>
+              {hasWarningBadge && (
+                <button
+                  type="button"
+                  onClick={() => setShowSecurityModal(true)}
+                  className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full border-2 border-white ring-1 ring-amber-600/30 cursor-pointer animate-pulse"
+                  title="Peringatan Keamanan: Akun belum memiliki kata sandi. Klik untuk mengamankan."
+                />
+              )}
+            </div>
           </div>
         </header>
 
@@ -775,6 +926,117 @@ export default function DashboardPage() {
                   className="px-5 py-2.5 rounded-xl bg-[#6DA003] text-white font-bold text-xs hover:brightness-105 shadow-sm"
                 >
                   Simpan Pengeluaran
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 6. MODAL KEAMANAN: AMANKAN AKUN KELUARGA IBU               */}
+      {/* ========================================================= */}
+      {showSecurityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-xl shrink-0">
+                  🛡️
+                </div>
+                <div>
+                  <h3 className="text-[18px] font-bold text-[#0D0101] leading-tight">
+                    Amankan Akun Keluarga Ibu
+                  </h3>
+                  <span className="text-[11px] font-semibold text-[#0C4B20]">
+                    Porsi Kita • Perlindungan Akun
+                  </span>
+                </div>
+              </div>
+              {!isOver24Hours && (
+                <button
+                  type="button"
+                  onClick={() => setShowSecurityModal(false)}
+                  className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
+                  title="Tutup dialog"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <p className="text-[13px] text-[#5F5F5F] mt-3.5 leading-relaxed">
+              {isOver24Hours
+                ? 'Sudah lebih dari 24 jam akun keluarga Ibu belum memiliki kata sandi. Demi keamanan data keluarga dan anggaran belanja, mohon buat kata sandi baru untuk akun ini sebelum melanjutkan.'
+                : 'Ibu baru saja masuk tanpa kata sandi. Silakan buat kata sandi baru untuk melindungi akun keluarga saat masuk kembali.'}
+            </p>
+
+            {passwordError && (
+              <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{passwordError}</span>
+              </div>
+            )}
+            {passwordSuccess && (
+              <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <span>✓</span>
+                <span>{passwordSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSecurityPassword} className="py-4 space-y-3.5">
+              <div>
+                <label className="text-xs font-bold text-[#0D0101] block mb-1">
+                  Kata Sandi Baru
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="Minimal 6 karakter"
+                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0D0101] block mb-1">
+                  Ulangi Kata Sandi Baru
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                  placeholder="Ulangi kata sandi baru"
+                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                {!isOver24Hours && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSecurityModal(false)}
+                    className="min-h-[48px] px-5 py-2.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-bold hover:bg-stone-200 transition cursor-pointer"
+                  >
+                    Nanti Saja
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={passwordLoading}
+                  style={{
+                    background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
+                    boxShadow: '0 4px 12px rgba(109, 160, 3, 0.25)',
+                  }}
+                  className="min-h-[48px] px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:brightness-105 transition shadow-sm cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {passwordLoading ? (
+                    <span>Menyimpan Sandi...</span>
+                  ) : (
+                    <span>Simpan Kata Sandi Akun</span>
+                  )}
                 </button>
               </div>
             </form>

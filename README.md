@@ -1,5 +1,7 @@
 # 🍽️ Porsi Kita
 
+![alt text](image.png)
+
 > **“Satu menu keluarga, gizi tepat untuk setiap anggota.”**
 
 Porsi Kita adalah aplikasi web mobile-first yang membantu keluarga Indonesia menyusun menu mingguan yang hemat, aman dari alergi, dan **tepat gizi untuk setiap anggota keluarga**. Ibu memasak satu menu untuk seluruh keluarga, sementara porsi dan kecukupan gizi dihitung terpisah untuk tiap anggota: anak usia 2 tahun ke atas, remaja, ibu hamil atau menyusui, dewasa, dan lansia.
