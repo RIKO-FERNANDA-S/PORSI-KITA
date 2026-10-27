@@ -422,6 +422,7 @@ export default function MenuPage() {
         setMobileOpen={setMobileSidebarOpen}
         anggotaCount={anggotaList.length}
         rencanaMenuId={rencanaMenu.id}
+        
       />
 
       {/* ========================================================= */}

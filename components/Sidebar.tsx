@@ -63,7 +63,7 @@ export default function Sidebar({
 
       {/* Main Aside Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-full w-64 lg:w-72 bg-white border-r border-[#c3c9b2]/40 z-50 flex flex-col justify-between py-6 px-4 lg:px-5 transition-transform duration-300 shadow-sm ${
+        className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-[#c3c9b2]/40 z-50 flex flex-col justify-between py-6 px-4 transition-transform duration-300 shadow-sm ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >

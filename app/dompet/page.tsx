@@ -298,7 +298,7 @@ export default function DompetBulananPage() {
       </header>
 
       {/* Desktop Fixed Header */}
-      <header className="hidden lg:flex fixed top-0 left-64 lg:left-72 right-0 h-20 bg-[#fff8f7]/85 backdrop-blur-xl border-b border-[#c3c9b2]/30 z-40 items-center justify-between px-8 shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
+      <header className="hidden lg:flex fixed top-0 left-64 right-0 h-20 bg-[#fff8f7]/85 backdrop-blur-xl border-b border-[#c3c9b2]/30 z-40 items-center justify-between px-8 shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
         <div className="flex flex-col">
           <span className="text-[11px] font-bold uppercase tracking-widest text-[#737a65]">
             Sistem Cipta Rasa
@@ -325,7 +325,7 @@ export default function DompetBulananPage() {
       </header>
 
       {/* 3. MAIN DASHBOARD CONTENT */}
-      <main className="lg:pl-64 lg:pl-72 pt-4 lg:pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+      <main className="lg:pl-64 pt-4 lg:pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-col gap-6">
 
           {/* TOP HEADER SECTION */}
