@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Sidebar from '../../components/Sidebar';
@@ -143,6 +143,16 @@ function getFotoResep(resep: ResepMasakan, dbImageMap?: Record<string, string>):
   return `/images/resep/${resep.kode}.webp`;
 }
 
+interface CalendarDayItem {
+  hari_ke: number;
+  label: string;
+  shortLabel: string;
+  dateNum: number;
+  dateFormatted: string;
+  fullDate: string;
+  isToday: boolean;
+}
+
 export default function MenuPage() {
   const [rencanaMenu, setRencanaMenu] = useState<RencanaMenu7Hari | null>(null);
   const [keluarga, setKeluarga] = useState<Keluarga | null>(null);
@@ -157,6 +167,12 @@ export default function MenuPage() {
   const [selectedMemberTabId, setSelectedMemberTabId] = useState<string>('');
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenerateNotice, setRegenerateNotice] = useState<string | null>(null);
+
+  // Realtime date state (sinkronisasi di useEffect untuk menghindari prerender error Next.js 16)
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
+
+  // Toggle rincian gizi teknis (dibuat collapsible agar ramah lansia & tidak membebani tampilan)
+  const [showNutritionDetails, setShowNutritionDetails] = useState(false);
 
   // Modals state
   const [detailResepModal, setDetailResepModal] = useState<ResepMasakan | null>(null);
@@ -177,6 +193,14 @@ export default function MenuPage() {
     if (a.length > 0) {
       setSelectedMemberTabId(a[0].id);
     }
+
+    // Sinkronisasi realtime tanggal & hari ini
+    const now = new Date();
+    setCurrentDate(now);
+    const dow = now.getDay();
+    const todayIndex = dow === 0 ? 7 : dow;
+    setSelectedDayIndex(todayIndex);
+
     setLoading(false);
 
     // Ambil gambar resep langsung dari database PostgreSQL
@@ -189,6 +213,57 @@ export default function MenuPage() {
       })
       .catch((err) => console.warn('Gagal memuat gambar resep database:', err));
   }, []);
+
+  // Hitung tanggal riil kalender berjalan (Senin s/d Minggu)
+  const calendarDays = useMemo<CalendarDayItem[]>(() => {
+    const dayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    const monthNamesShort = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    ];
+
+    if (!currentDate) {
+      return [1, 2, 3, 4, 5, 6, 7].map((num) => ({
+        hari_ke: num,
+        label: dayNames[num - 1],
+        shortLabel: dayNames[num - 1].slice(0, 3),
+        dateNum: num,
+        dateFormatted: `Hari ${num}`,
+        fullDate: dayNames[num - 1],
+        isToday: false,
+      }));
+    }
+
+    const today = new Date(currentDate);
+    const dow = today.getDay();
+    const offsetToMonday = dow === 0 ? -6 : 1 - dow;
+
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + offsetToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    return [1, 2, 3, 4, 5, 6, 7].map((num) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + (num - 1));
+      const dayName = dayNames[num - 1];
+      const dateNum = d.getDate();
+      const monthShort = monthNamesShort[d.getMonth()];
+      const isToday =
+        d.getDate() === today.getDate() &&
+        d.getMonth() === today.getMonth() &&
+        d.getFullYear() === today.getFullYear();
+
+      return {
+        hari_ke: num,
+        label: dayName,
+        shortLabel: dayName.slice(0, 3),
+        dateNum,
+        dateFormatted: `${dateNum} ${monthShort}`,
+        fullDate: `${dayName}, ${dateNum} ${monthShort}`,
+        isToday,
+      };
+    });
+  }, [currentDate]);
 
   // Handle Regenerate Menu with Micro-interaction
   const handleRegenerate = () => {
@@ -462,13 +537,13 @@ export default function MenuPage() {
       {/* ========================================================= */}
       {/* 3. MAIN DASHBOARD CONTENT                                */}
       {/* ========================================================= */}
-      <main className="lg:pl-64 pt-4 lg:pt-20 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+      <main className="lg:pl-64 pt-4 lg:pt-20 pb-28 lg:pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-col gap-6">
 
           {/* SECTION 1: HEADER & KONTROL UTAMA */}
-          <section className="bg-white p-5 sm:p-7 rounded-3xl shadow-xs border border-stone-200/70 flex flex-col gap-5">
+          <section className="bg-white p-5 sm:p-7 rounded-3xl shadow-xs border border-stone-200/70 flex flex-col gap-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2c1514] tracking-tight">
                     Rencana Menu Keluarga
@@ -517,106 +592,136 @@ export default function MenuPage() {
                 </button>
               </div>
             </div>
-
-            {/* Smart Information Card */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 bg-[#fff0ef] rounded-2xl border border-stone-200/50">
-              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#b2f2b6] text-[#367041] flex-shrink-0">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-              <p className="text-[13px] sm:text-[14px] text-[#2c1514] leading-relaxed">
-                <span className="font-bold text-[#306a3b]">Filter Aktif:</span> Budget Rp{' '}
-                {keluarga?.budget_harian_rp.toLocaleString('id-ID') || '85.000'}/hari • Bebas Alergi:{' '}
-                {anggotaList.some((a) => a.alergen.length > 0)
-                  ? Array.from(new Set(anggotaList.flatMap((a) => a.alergen))).join(', ')
-                  : 'Tidak ada alergi terdaftar'}{' '}
-                • Sasaran: Gizi Seimbang Keluarga &amp; Ragam Pangan Lokal
-              </p>
-            </div>
           </section>
 
-          {/* SECTION 2: NAVIGASI HARI (7 Pill Horizontal) */}
-          <nav aria-label="Jadwal Hari Mingguan" className="overflow-x-auto pb-1 scrollbar-none">
-            <div className="grid grid-flow-col auto-cols-[minmax(130px,1fr)] sm:grid-cols-7 gap-2.5 min-w-full">
-              {rencanaMenu.hari.map((h) => {
-                const isActive = h.hari_ke === selectedDayIndex;
-                const costRibuan = Math.round(h.total_biaya_hari_rp / 1000);
+          {/* SECTION 2: NAVIGASI HARI (DROPDOWN RAMAH LANSIA + STRIP HARI) */}
+          <section className="flex flex-col gap-3">
+            {/* Dropdown Akses Cepat Ramah Lansia (Ukuran Jari Luas & Kontras Tinggi) */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-stone-200/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-1">
+                <span className="w-11 h-11 rounded-xl bg-[#fff0ef] text-[#306a3b] flex items-center justify-center text-xl flex-shrink-0">
+                  📅
+                </span>
+                <div className="flex-1">
+                  <label htmlFor="select-hari-lansia" className="text-[12px] font-bold text-[#737a65] uppercase tracking-wider block">
+                    Pilih Hari Masak (Sentuh untuk memilih):
+                  </label>
+                  <div className="relative mt-1">
+                    <select
+                      id="select-hari-lansia"
+                      value={selectedDayIndex}
+                      onChange={(e) => setSelectedDayIndex(Number(e.target.value))}
+                      className="w-full min-h-[48px] pl-3.5 pr-10 py-2.5 bg-stone-50 border-2 border-stone-200 hover:border-[#306a3b] focus:border-[#306a3b] rounded-xl font-bold text-[15px] sm:text-[16px] text-[#2c1514] cursor-pointer appearance-none transition"
+                    >
+                      {calendarDays.map((cal) => {
+                        const dayData = rencanaMenu.hari.find((h) => h.hari_ke === cal.hari_ke);
+                        const cost = dayData ? Math.round(dayData.total_biaya_hari_rp / 1000) : 0;
+                        return (
+                          <option key={cal.hari_ke} value={cal.hari_ke}>
+                            {cal.fullDate} (Hari ke-{cal.hari_ke}) {cal.isToday ? '★ HARI INI' : ''} • Rp {cost}rb
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-[#306a3b]">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                return (
-                  <button
-                    key={h.hari_ke}
-                    type="button"
-                    onClick={() => setSelectedDayIndex(h.hari_ke)}
-                    aria-current={isActive ? 'date' : undefined}
-                    className={`day-pill flex flex-col items-center justify-center p-3.5 rounded-2xl transition-all duration-200 min-h-[82px] cursor-pointer text-center ${
-                      isActive
-                        ? 'bg-[#306a3b] text-white shadow-md'
-                        : 'bg-white hover:bg-[#fff0ef] text-[#2c1514] shadow-xs border border-stone-200/60'
-                    }`}
-                  >
-                    <span
-                      className={`text-[11px] font-bold flex items-center gap-1 uppercase tracking-wider ${
-                        isActive ? 'text-[#b2f2b6]' : 'text-[#737a65]'
-                      }`}
-                    >
-                      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#6da003]" />}
-                      {h.label_hari}
-                    </span>
-                    <span
-                      className={`text-[18px] font-black my-0.5 tracking-tight ${
-                        isActive ? 'text-white' : 'text-[#2c1514]'
-                      }`}
-                    >
-                      Hari ke-{h.hari_ke}
-                    </span>
-                    <span
-                      className={`text-[11px] font-medium ${
-                        isActive ? 'text-[#b2f2b6]' : 'text-[#737a65]'
-                      }`}
-                    >
-                      Rp {costRibuan}rb
-                    </span>
-                  </button>
-                );
-              })}
+              {/* Tombol Panah Geser Hari Cepat (Mudah ditekan jari lansia) */}
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDayIndex((prev) => (prev > 1 ? prev - 1 : 7))}
+                  className="min-h-[48px] px-4 py-2.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-[#fff0ef] text-[#2c1514] font-bold text-[14px] flex items-center gap-2 transition active:scale-95 cursor-pointer"
+                  title="Ke hari sebelumnya"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  <span>Sebelumnya</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDayIndex((prev) => (prev < 7 ? prev + 1 : 1))}
+                  className="min-h-[48px] px-4 py-2.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-[#fff0ef] text-[#2c1514] font-bold text-[14px] flex items-center gap-2 transition active:scale-95 cursor-pointer"
+                  title="Ke hari berikutnya"
+                >
+                  <span>Berikutnya</span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </nav>
 
-          {/* SECTION 3: BANNER STATUS HARI AKTIF */}
-          <section className="bg-white p-5 sm:p-6 rounded-2xl shadow-xs border border-stone-200/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
+            {/* Strip 7 Hari (Diberi tanggal riil & target sentuh lega) */}
+            <nav aria-label="Jadwal Hari Mingguan" className="overflow-x-auto pb-1 scrollbar-none">
+              <div className="grid grid-flow-col auto-cols-[minmax(120px,1fr)] sm:grid-cols-7 gap-2 min-w-full">
+                {rencanaMenu.hari.map((h) => {
+                  const isActive = h.hari_ke === selectedDayIndex;
+                  const cal = calendarDays.find((c) => c.hari_ke === h.hari_ke);
+                  const costRibuan = Math.round(h.total_biaya_hari_rp / 1000);
+
+                  return (
+                    <button
+                      key={h.hari_ke}
+                      type="button"
+                      onClick={() => setSelectedDayIndex(h.hari_ke)}
+                      aria-current={isActive ? 'date' : undefined}
+                      className={`day-pill flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-200 min-h-[76px] cursor-pointer text-center ${
+                        isActive
+                          ? 'bg-[#306a3b] text-white shadow-md ring-2 ring-[#6da003]'
+                          : 'bg-white hover:bg-[#fff0ef] text-[#2c1514] shadow-xs border border-stone-200/70'
+                      }`}
+                    >
+                      <span
+                        className={`text-[12px] font-bold flex items-center gap-1 uppercase tracking-wider ${
+                          isActive ? 'text-[#b2f2b6]' : 'text-[#737a65]'
+                        }`}
+                      >
+                        {cal?.shortLabel || h.label_hari}
+                        {cal?.isToday && (
+                          <span className="w-2 h-2 rounded-full bg-[#6da003]" title="Hari ini" />
+                        )}
+                      </span>
+                      <span
+                        className={`text-[16px] font-black my-0.5 tracking-tight ${
+                          isActive ? 'text-white' : 'text-[#2c1514]'
+                        }`}
+                      >
+                        {cal?.dateFormatted || `Hari ${h.hari_ke}`}
+                      </span>
+                      <span
+                        className={`text-[11px] font-semibold ${
+                          isActive ? 'text-[#b2f2b6]' : 'text-[#737a65]'
+                        }`}
+                      >
+                        Rp {costRibuan}rb
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </nav>
+          </section>
+
+          {/* SECTION 3: TAB SWITCHER 3 WAKTU MAKAN DENGAN RINGKASAN HARI (BEBAS REDUNDANSI) */}
+          <div className="w-full bg-[#fff0ef] p-2 sm:p-2.5 rounded-2xl shadow-xs border border-stone-200/50 flex flex-col gap-2">
+            <div className="flex items-center justify-between px-2 pt-1 pb-0.5">
+              <span className="text-[13px] font-bold text-[#2c1514] flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#6da003]" />
-                <h2 className="text-[18px] font-bold text-[#2c1514]">
-                  {activeDay.label_hari} (Hari ke-{activeDay.hari_ke})
-                </h2>
-              </div>
-              <p className="text-[13px] sm:text-[14px] text-[#434937]">
-                Estimasi Biaya:{' '}
-                <strong className="text-[#2c1514] font-bold">
-                  Rp {activeDay.total_biaya_hari_rp.toLocaleString('id-ID')}
-                </strong>{' '}
-                • Skor Gizi Keluarga:{' '}
-                <strong className="text-[#306a3b] font-bold">
-                  {activeDay.skor_keluarga.skor_rata_rata}% AKG Terpenuhi
-                </strong>
-              </p>
+                {activeDay.label_hari} • Hari ke-{activeDay.hari_ke}
+              </span>
+              <span className="text-[12px] font-semibold text-[#737a65]">
+                Total Hari Ini: <strong className="text-[#306a3b]">Rp {activeDay.total_biaya_hari_rp.toLocaleString('id-ID')}</strong> • {activeDay.skor_keluarga.skor_rata_rata}% AKG
+              </span>
             </div>
 
-            <Link
-              href={`/belanja/${rencanaMenu.id}`}
-              className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-full bg-[#306a3b] text-white hover:bg-[#155126] transition-all font-semibold text-[13px] sm:text-[14px] flex items-center justify-center gap-2 active:scale-98 shadow-xs"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              <span>Buka Daftar Belanja Hari Ini</span>
-            </Link>
-          </section>
-
-          {/* SECTION 4: TAB SWITCHER 3 WAKTU MAKAN */}
-          <div className="w-full bg-[#fff0ef] p-1.5 sm:p-2 rounded-2xl shadow-xs border border-stone-200/50">
             <div aria-label="Pilih Waktu Makan" className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="tablist">
               {/* Tab Pagi */}
               <button
@@ -624,7 +729,7 @@ export default function MenuPage() {
                 role="tab"
                 aria-selected={activeMealTab === 'pagi'}
                 onClick={() => setActiveMealTab('pagi')}
-                className={`min-h-[58px] px-4 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer text-left ${
+                className={`min-h-[56px] px-4 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer text-left active:scale-98 ${
                   activeMealTab === 'pagi'
                     ? 'bg-[#306a3b] text-white shadow-md'
                     : 'bg-white hover:bg-stone-50 text-[#434937]'
@@ -660,7 +765,7 @@ export default function MenuPage() {
                 role="tab"
                 aria-selected={activeMealTab === 'siang'}
                 onClick={() => setActiveMealTab('siang')}
-                className={`min-h-[58px] px-4 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer text-left ${
+                className={`min-h-[56px] px-4 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer text-left active:scale-98 ${
                   activeMealTab === 'siang'
                     ? 'bg-[#306a3b] text-white shadow-md'
                     : 'bg-white hover:bg-stone-50 text-[#434937]'
@@ -696,7 +801,7 @@ export default function MenuPage() {
                 role="tab"
                 aria-selected={activeMealTab === 'malam'}
                 onClick={() => setActiveMealTab('malam')}
-                className={`min-h-[58px] px-4 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer text-left ${
+                className={`min-h-[56px] px-4 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer text-left active:scale-98 ${
                   activeMealTab === 'malam'
                     ? 'bg-[#306a3b] text-white shadow-md'
                     : 'bg-white hover:bg-stone-50 text-[#434937]'
@@ -728,7 +833,7 @@ export default function MenuPage() {
             </div>
           </div>
 
-          {/* SECTION 5: MEAL PANEL (Menu Cards & Portion Breakdown) */}
+          {/* SECTION 4: MEAL PANEL (Menu Cards & Portion Breakdown) */}
           <section className="bg-white p-5 sm:p-7 rounded-3xl shadow-xs border border-stone-200/70 flex flex-col gap-6">
             <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-stone-100">
               <div className="flex items-center gap-3">
@@ -784,7 +889,7 @@ export default function MenuPage() {
                         <h4 className="font-bold text-[17px] text-[#2c1514] leading-snug">
                           {dish.nama}
                         </h4>
-                        <p className="text-[11px] text-[#737a65] line-clamp-1 mt-0.5">
+                        <p className="text-[12px] text-[#737a65] line-clamp-1 mt-0.5">
                           {dish.keterangan}
                         </p>
                       </div>
@@ -797,31 +902,31 @@ export default function MenuPage() {
                       </div>
                     </div>
 
-                    {/* Action Buttons: Detail Resep & Bahan (Crucial User Requirement) + Swap */}
+                    {/* Action Buttons: Detail Resep & Swap dengan Target Sentuh Ramah Lansia (min-h-[48px]) */}
                     <div className="mt-4 pt-3 border-t border-stone-100 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => setDetailResepModal(dish)}
-                        className="min-h-[42px] px-3 rounded-full bg-[#306a3b] hover:bg-[#155126] text-white text-[12px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                        className="min-h-[48px] px-3 rounded-full bg-[#306a3b] hover:bg-[#155126] text-white text-[13px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-98"
                         title="Lihat resep lengkap dan takaran bahan baku"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
-                        <span>Lihat Resep &amp; Bahan</span>
+                        <span>Resep &amp; Bahan</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => handleOpenSwap(dish, activeMealTab)}
-                        className="min-h-[42px] px-3 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-[#306a3b] text-[12px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="min-h-[48px] px-3 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-[#306a3b] text-[13px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 border border-stone-200/50"
                         title="Ganti dengan masakan alternatif yang sejenis"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        <span>Ganti</span>
+                        <span>Ganti Menu</span>
                       </button>
                     </div>
                   </article>
@@ -878,188 +983,284 @@ export default function MenuPage() {
             </div>
           </section>
 
-          {/* SECTION 6: PANEL TRANSPARANSI GIZI (KENAPA MENU INI?) */}
-          <section className="bg-white p-5 sm:p-7 rounded-3xl shadow-xs border border-stone-200/70 flex flex-col gap-5">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <svg className="w-6 h-6 text-[#306a3b]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <h3 className="text-xl font-extrabold text-[#2c1514]">
-                  Kenapa Menu Ini? (Transparansi Kecukupan Gizi)
-                </h3>
+          {/* SECTION 5: PANEL TRANSPARANSI GIZI (AKG KEMENKES - ACCORDION COLLAPSIBLE RAMAH LANSIA) */}
+          <section className="bg-white rounded-3xl shadow-xs border border-stone-200/70 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowNutritionDetails((prev) => !prev)}
+              aria-expanded={showNutritionDetails}
+              className="w-full p-5 sm:p-6 flex items-center justify-between gap-4 text-left hover:bg-stone-50/80 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#b2f2b6] text-[#367041] flex items-center justify-center text-xl flex-shrink-0">
+                  📊
+                </div>
+                <div>
+                  <h3 className="text-[17px] sm:text-lg font-extrabold text-[#2c1514] flex items-center gap-2 flex-wrap">
+                    <span>Kecukupan Gizi Keluarga (AKG Kemenkes)</span>
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[#b2f2b6] text-[#367041] font-bold">
+                      {activeDay.skor_keluarga.skor_rata_rata}% Terpenuhi
+                    </span>
+                  </h3>
+                  <p className="text-[12px] sm:text-[13px] text-[#737a65] mt-0.5">
+                    {showNutritionDetails
+                      ? 'Ketuk untuk menutup rincian zat gizi'
+                      : 'Ketuk untuk melihat rincian pemenuhan kalori, protein, zat besi, & kalsium'}
+                  </p>
+                </div>
               </div>
-              <p className="text-[13px] sm:text-[14px] text-[#434937]">
-                Perhitungan deterministik matematis merujuk Angka Kecukupan Gizi (AKG) Kemenkes 2019 &amp; TKPI, bukan klaim generatif acak.
-              </p>
-            </div>
 
-            {/* Member Selector Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" id="member-tabs">
-              {anggotaList.map((a) => {
-                const isSelected = a.id === selectedMemberTabId;
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setSelectedMemberTabId(a.id)}
-                    className={`px-4 py-2 rounded-full text-[13px] font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#306a3b] text-white shadow-xs'
-                        : 'bg-[#fff0ef] hover:bg-[#ffe2df] text-[#434937]'
-                    }`}
-                  >
-                    {a.alias}
-                  </button>
-                );
-              })}
-            </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="hidden sm:inline-block text-[13px] font-bold text-[#306a3b]">
+                  {showNutritionDetails ? 'Tutup Rincian' : 'Lihat Rincian'}
+                </span>
+                <span
+                  className={`w-9 h-9 rounded-full bg-[#fff0ef] text-[#306a3b] flex items-center justify-center transition-transform duration-200 ${
+                    showNutritionDetails ? 'rotate-180' : ''
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </span>
+              </div>
+            </button>
 
-            {/* Nutrition Transparency Table */}
-            {activeSkorAnggota && (
-              <div className="overflow-x-auto rounded-2xl bg-[#fff0ef] p-3 sm:p-4 border border-stone-200/50">
-                <table className="w-full text-left text-[13px] sm:text-[14px]">
-                  <thead>
-                    <tr className="text-[11px] sm:text-[12px] font-bold text-[#737a65] uppercase tracking-wider">
-                      <th className="pb-3 pl-3">Zat Gizi Penting</th>
-                      <th className="pb-3">Target Standar Kemenkes</th>
-                      <th className="pb-3">Dari Menu Hari Ini</th>
-                      <th className="pb-3 text-right pr-3">Status Capaian</th>
-                    </tr>
-                  </thead>
-                  <tbody className="space-y-1.5">
-                    {/* Energi */}
-                    <tr className="bg-white rounded-xl shadow-2xs">
-                      <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
-                        Energi (Kalori)
-                      </td>
-                      <td className="py-3 text-[#434937]">
-                        {activeSkorAnggota.kebutuhan.energi_kcal} kkal
-                      </td>
-                      <td className="py-3 font-bold text-[#2c1514] font-mono">
-                        {Math.round(activeSkorAnggota.asupan_total.energi_kcal)} kkal
-                      </td>
-                      <td className="py-3 text-right pr-3 rounded-r-xl">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
-                          {activeSkorAnggota.rincian_zat.energi_kcal?.persen || 100}%
-                        </span>
-                      </td>
-                    </tr>
+            {showNutritionDetails && (
+              <div className="px-5 sm:px-7 pb-6 pt-2 border-t border-stone-100 flex flex-col gap-4">
+                <p className="text-[13px] text-[#434937]">
+                  Perhitungan deterministik matematis merujuk Angka Kecukupan Gizi (AKG) Kemenkes 2019 &amp; TKPI:
+                </p>
 
-                    {/* Protein */}
-                    <tr className="bg-white rounded-xl shadow-2xs">
-                      <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
-                        Protein Hewani &amp; Nabati
-                      </td>
-                      <td className="py-3 text-[#434937]">
-                        {activeSkorAnggota.kebutuhan.protein_g} gram
-                      </td>
-                      <td className="py-3 font-bold text-[#2c1514] font-mono">
-                        {Math.round(activeSkorAnggota.asupan_total.protein_g)} gram
-                      </td>
-                      <td className="py-3 text-right pr-3 rounded-r-xl">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
-                          {activeSkorAnggota.rincian_zat.protein_g?.persen || 100}%
-                        </span>
-                      </td>
-                    </tr>
+                {/* Member Selector Tabs */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" id="member-tabs">
+                  {anggotaList.map((a) => {
+                    const isSelected = a.id === selectedMemberTabId;
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => setSelectedMemberTabId(a.id)}
+                        className={`min-h-[44px] px-4 py-2 rounded-full text-[13px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#306a3b] text-white shadow-xs'
+                            : 'bg-[#fff0ef] hover:bg-[#ffe2df] text-[#434937]'
+                        }`}
+                      >
+                        {a.alias}
+                      </button>
+                    );
+                  })}
+                </div>
 
-                    {/* Zat Besi */}
-                    <tr className="bg-white rounded-xl shadow-2xs">
-                      <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
-                        Zat Besi (Fe)
-                      </td>
-                      <td className="py-3 text-[#434937]">
-                        {activeSkorAnggota.kebutuhan.zat_besi_mg} mg
-                      </td>
-                      <td className="py-3 font-bold text-[#2c1514] font-mono">
-                        {activeSkorAnggota.asupan_total.zat_besi_mg.toFixed(1)} mg
-                      </td>
-                      <td className="py-3 text-right pr-3 rounded-r-xl">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
-                          {activeSkorAnggota.rincian_zat.zat_besi_mg?.persen || 100}%
-                        </span>
-                      </td>
-                    </tr>
+                {/* Nutrition Transparency Table */}
+                {activeSkorAnggota && (
+                  <div className="overflow-x-auto rounded-2xl bg-[#fff0ef] p-3 sm:p-4 border border-stone-200/50">
+                    <table className="w-full text-left text-[13px] sm:text-[14px]">
+                      <thead>
+                        <tr className="text-[11px] sm:text-[12px] font-bold text-[#737a65] uppercase tracking-wider">
+                          <th className="pb-3 pl-3">Zat Gizi Penting</th>
+                          <th className="pb-3">Target Standar Kemenkes</th>
+                          <th className="pb-3">Dari Menu Hari Ini</th>
+                          <th className="pb-3 text-right pr-3">Status Capaian</th>
+                        </tr>
+                      </thead>
+                      <tbody className="space-y-1.5">
+                        {/* Energi */}
+                        <tr className="bg-white rounded-xl shadow-2xs">
+                          <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
+                            Energi (Kalori)
+                          </td>
+                          <td className="py-3 text-[#434937]">
+                            {activeSkorAnggota.kebutuhan.energi_kcal} kkal
+                          </td>
+                          <td className="py-3 font-bold text-[#2c1514] font-mono">
+                            {Math.round(activeSkorAnggota.asupan_total.energi_kcal)} kkal
+                          </td>
+                          <td className="py-3 text-right pr-3 rounded-r-xl">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
+                              {activeSkorAnggota.rincian_zat.energi_kcal?.persen || 100}%
+                            </span>
+                          </td>
+                        </tr>
 
-                    {/* Kalsium */}
-                    <tr className="bg-white rounded-xl shadow-2xs">
-                      <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
-                        Kalsium (Ca)
-                      </td>
-                      <td className="py-3 text-[#434937]">
-                        {activeSkorAnggota.kebutuhan.kalsium_mg} mg
-                      </td>
-                      <td className="py-3 font-bold text-[#2c1514] font-mono">
-                        {Math.round(activeSkorAnggota.asupan_total.kalsium_mg)} mg
-                      </td>
-                      <td className="py-3 text-right pr-3 rounded-r-xl">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
-                          {activeSkorAnggota.rincian_zat.kalsium_mg?.persen || 100}%
-                        </span>
-                      </td>
-                    </tr>
+                        {/* Protein */}
+                        <tr className="bg-white rounded-xl shadow-2xs">
+                          <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
+                            Protein Hewani &amp; Nabati
+                          </td>
+                          <td className="py-3 text-[#434937]">
+                            {activeSkorAnggota.kebutuhan.protein_g} gram
+                          </td>
+                          <td className="py-3 font-bold text-[#2c1514] font-mono">
+                            {Math.round(activeSkorAnggota.asupan_total.protein_g)} gram
+                          </td>
+                          <td className="py-3 text-right pr-3 rounded-r-xl">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
+                              {activeSkorAnggota.rincian_zat.protein_g?.persen || 100}%
+                            </span>
+                          </td>
+                        </tr>
 
-                    {/* Seng */}
-                    <tr className="bg-white rounded-xl shadow-2xs">
-                      <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
-                        Seng / Zinc (Zn)
-                      </td>
-                      <td className="py-3 text-[#434937]">
-                        {activeSkorAnggota.kebutuhan.seng_mg} mg
-                      </td>
-                      <td className="py-3 font-bold text-[#2c1514] font-mono">
-                        {activeSkorAnggota.asupan_total.seng_mg.toFixed(1)} mg
-                      </td>
-                      <td className="py-3 text-right pr-3 rounded-r-xl">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
-                          {activeSkorAnggota.rincian_zat.seng_mg?.persen || 100}%
-                        </span>
-                      </td>
-                    </tr>
+                        {/* Zat Besi */}
+                        <tr className="bg-white rounded-xl shadow-2xs">
+                          <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
+                            Zat Besi (Fe)
+                          </td>
+                          <td className="py-3 text-[#434937]">
+                            {activeSkorAnggota.kebutuhan.zat_besi_mg} mg
+                          </td>
+                          <td className="py-3 font-bold text-[#2c1514] font-mono">
+                            {activeSkorAnggota.asupan_total.zat_besi_mg.toFixed(1)} mg
+                          </td>
+                          <td className="py-3 text-right pr-3 rounded-r-xl">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
+                              {activeSkorAnggota.rincian_zat.zat_besi_mg?.persen || 100}%
+                            </span>
+                          </td>
+                        </tr>
 
-                    {/* Vitamin A */}
-                    <tr className="bg-white rounded-xl shadow-2xs">
-                      <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
-                        Vitamin A (mcg RE)
-                      </td>
-                      <td className="py-3 text-[#434937]">
-                        {activeSkorAnggota.kebutuhan.vitamin_a_mcg} mcg
-                      </td>
-                      <td className="py-3 font-bold text-[#2c1514] font-mono">
-                        {Math.round(activeSkorAnggota.asupan_total.vitamin_a_mcg)} mcg
-                      </td>
-                      <td className="py-3 text-right pr-3 rounded-r-xl">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
-                          {activeSkorAnggota.rincian_zat.vitamin_a_mcg?.persen || 100}%
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                        {/* Kalsium */}
+                        <tr className="bg-white rounded-xl shadow-2xs">
+                          <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
+                            Kalsium (Ca)
+                          </td>
+                          <td className="py-3 text-[#434937]">
+                            {activeSkorAnggota.kebutuhan.kalsium_mg} mg
+                          </td>
+                          <td className="py-3 font-bold text-[#2c1514] font-mono">
+                            {Math.round(activeSkorAnggota.asupan_total.kalsium_mg)} mg
+                          </td>
+                          <td className="py-3 text-right pr-3 rounded-r-xl">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
+                              {activeSkorAnggota.rincian_zat.kalsium_mg?.persen || 100}%
+                            </span>
+                          </td>
+                        </tr>
+
+                        {/* Seng */}
+                        <tr className="bg-white rounded-xl shadow-2xs">
+                          <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
+                            Seng / Zinc (Zn)
+                          </td>
+                          <td className="py-3 text-[#434937]">
+                            {activeSkorAnggota.kebutuhan.seng_mg} mg
+                          </td>
+                          <td className="py-3 font-bold text-[#2c1514] font-mono">
+                            {activeSkorAnggota.asupan_total.seng_mg.toFixed(1)} mg
+                          </td>
+                          <td className="py-3 text-right pr-3 rounded-r-xl">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
+                              {activeSkorAnggota.rincian_zat.seng_mg?.persen || 100}%
+                            </span>
+                          </td>
+                        </tr>
+
+                        {/* Vitamin A */}
+                        <tr className="bg-white rounded-xl shadow-2xs">
+                          <td className="py-3 pl-3 font-semibold text-[#2c1514] rounded-l-xl">
+                            Vitamin A (mcg RE)
+                          </td>
+                          <td className="py-3 text-[#434937]">
+                            {activeSkorAnggota.kebutuhan.vitamin_a_mcg} mcg
+                          </td>
+                          <td className="py-3 font-bold text-[#2c1514] font-mono">
+                            {Math.round(activeSkorAnggota.asupan_total.vitamin_a_mcg)} mcg
+                          </td>
+                          <td className="py-3 text-right pr-3 rounded-r-xl">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[11px] font-bold">
+                              {activeSkorAnggota.rincian_zat.vitamin_a_mcg?.persen || 100}%
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Kotak Catatan Ahli Gizi Porsi Kita */}
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-[#fff0ef] border border-stone-200/50">
+                  <div className="w-8 h-8 rounded-full bg-[#b2f2b6] text-[#367041] flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-[14px] text-[#2c1514]">
+                      Catatan Ahli Gizi Porsi Kita untuk {activeAnggota?.alias}:
+                    </span>
+                    <p className="text-[13px] text-[#434937] leading-relaxed">
+                      Asupan zat gizi harian {activeAnggota?.alias} terpenuhi secara seimbang dari perpaduan pangan lokal tanpa memerlukan suplemen mahal. Pengaturan porsi yang terukur menjamin kecukupan kalori dan mikronutrisi harian tetap dalam ambang batas aman.
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
-
-            {/* Kotak Catatan Ahli Gizi Porsi Kita */}
-            <div className="flex items-start gap-3 p-4 rounded-2xl bg-[#fff0ef] border border-stone-200/50">
-              <div className="w-8 h-8 rounded-full bg-[#b2f2b6] text-[#367041] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="font-bold text-[14px] text-[#2c1514]">
-                  Catatan Ahli Gizi Porsi Kita untuk {activeAnggota?.alias}:
-                </span>
-                <p className="text-[13px] text-[#434937] leading-relaxed">
-                  Asupan zat gizi harian {activeAnggota?.alias} terpenuhi secara seimbang dari perpaduan pangan lokal (seperti bayam, tempe, telur, dan ikan kembung segar) tanpa memerlukan suplemen mahal. Pengaturan porsi yang terukur menjamin kecukupan kalori dan mikronutrisi harian tetap dalam ambang batas aman.
-                </p>
-              </div>
-            </div>
           </section>
 
         </div>
       </main>
+
+      {/* ========================================================= */}
+      {/* MOBILE THUMB-ZONE DOCK BAR (Khusus Ponsel & Ramah Lansia)  */}
+      {/* ========================================================= */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-stone-200/90 px-3 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-2">
+        {/* Tombol Hari Sebelumnya */}
+        <button
+          type="button"
+          onClick={() => setSelectedDayIndex((prev) => (prev > 1 ? prev - 1 : 7))}
+          className="min-h-[48px] w-12 rounded-xl bg-stone-100 hover:bg-[#fff0ef] text-[#2c1514] flex items-center justify-center font-bold transition active:scale-95 cursor-pointer border border-stone-200/60"
+          aria-label="Hari sebelumnya"
+          title="Hari sebelumnya"
+        >
+          <svg className="w-5 h-5 text-[#2c1514]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        {/* Dropdown Hari Cepat di Thumb Zone */}
+        <div className="relative flex-1">
+          <select
+            value={selectedDayIndex}
+            onChange={(e) => setSelectedDayIndex(Number(e.target.value))}
+            className="w-full min-h-[48px] pl-2.5 pr-8 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold text-[13px] text-[#2c1514] appearance-none cursor-pointer text-center"
+            aria-label="Pilih hari masak dari dock bawah"
+          >
+            {calendarDays.map((cal) => (
+              <option key={cal.hari_ke} value={cal.hari_ke}>
+                {cal.shortLabel}, {cal.dateFormatted} {cal.isToday ? '(Hari Ini)' : ''}
+              </option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#306a3b]">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Tombol Hari Berikutnya */}
+        <button
+          type="button"
+          onClick={() => setSelectedDayIndex((prev) => (prev < 7 ? prev + 1 : 1))}
+          className="min-h-[48px] w-12 rounded-xl bg-stone-100 hover:bg-[#fff0ef] text-[#2c1514] flex items-center justify-center font-bold transition active:scale-95 cursor-pointer border border-stone-200/60"
+          aria-label="Hari berikutnya"
+          title="Hari berikutnya"
+        >
+          <svg className="w-5 h-5 text-[#2c1514]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        {/* Tombol Cepat Belanja Pasar */}
+        <Link
+          href={`/belanja/${rencanaMenu.id}`}
+          className="min-h-[48px] px-3.5 rounded-xl bg-[#306a3b] hover:bg-[#155126] text-white font-bold text-[13px] flex items-center justify-center gap-1.5 transition active:scale-95 shadow-xs whitespace-nowrap"
+        >
+          <span>🛒</span>
+          <span>Belanja</span>
+        </Link>
+      </div>
 
       {/* ========================================================= */}
       {/* MODAL 1: DETAIL RESEP & BAHAN BAKU (USER REQUIREMENT)      */}
