@@ -186,21 +186,27 @@ export function generateMenu(input: GenerateInput): RencanaMenu7Hari {
         // 2. Lauk Hewani dengan aturan variasi dan batas hati ayam
         const kandidatHewani = poolHewani.filter((r) => {
           if (!cekAturanVariasi(r, i, riwayatResepPerHari, frekuensiResepMingguan)) return false;
-          if (r.kode === 'RSP004') {
-            const check = isResepAmanUntukKeluarga(r, anggota, pemakaianHatiAyam);
-            if (!check.aman) return false;
-          }
+          const check = isResepAmanUntukKeluarga(r, anggota, pemakaianHatiAyam);
+          if (!check.aman) return false;
           return true;
         });
+
+        const safeFallbackHewani = poolHewani.filter(
+          (r) => isResepAmanUntukKeluarga(r, anggota, pemakaianHatiAyam).aman
+        );
 
         const hewani =
           kandidatHewani.length > 0
             ? kandidatHewani[Math.floor(rng() * kandidatHewani.length)]
-            : poolHewani[Math.floor(rng() * poolHewani.length)];
+            : safeFallbackHewani.length > 0
+              ? safeFallbackHewani[Math.floor(rng() * safeFallbackHewani.length)]
+              : poolHewani.find((r) => isResepAmanUntukKeluarga(r, anggota, pemakaianHatiAyam).aman) || poolHewani[0];
 
         if (hewani) {
           hidangan.push(hewani);
-          if (hewani.kode === 'RSP004') pemakaianHatiAyam++;
+          if (hewani.kode === 'RSP004' || hewani.nama.toLowerCase().includes('hati ayam')) {
+            pemakaianHatiAyam++;
+          }
           frekuensiResepMingguan.set(
             hewani.kode,
             (frekuensiResepMingguan.get(hewani.kode) || 0) + 1

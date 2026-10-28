@@ -387,13 +387,99 @@ export async function generateFamilyMealPlanWithGemini({
   // 2. Ambil Harga Bahan Aktif (Prioritas Custom Warung vs Acuan Pasar Default)
   const activePricesData = await getFamilyActivePrices(familyId);
 
-  // 3. Ambil Katalog Resep & Relasi Bahan
-  const catalogResep = await prisma.resep.findMany({
+  // 3. Evaluasi Keamanan Gizi & Alergen Sekeluarga
+  // a. Kumpulkan seluruh alergen keluarga (Alergen dari 1 anggota menyingkirkan resep dari menu SELURUH KELUARGA)
+  const familyAllergens = new Set<string>();
+  for (const m of family.members) {
+    if (m.alergen && Array.isArray(m.alergen)) {
+      for (const al of m.alergen) {
+        if (typeof al === 'string') {
+          al.split(',').forEach((s: string) => {
+            const clean = s.trim().toLowerCase();
+            if (clean) familyAllergens.add(clean);
+          });
+        }
+      }
+    }
+  }
+
+  // b. Cek apakah ada balita usia 2-3 tahun
+  const hasToddler = family.members.some(
+    (m) => (m.usia_tahun >= 2 && m.usia_tahun <= 3) || m.usia_tahun <= 3
+  );
+
+  // c. Cek apakah ada ibu hamil trimester 1
+  const hasBumilT1 = family.members.some((m) => {
+    const jk = m.jenis_kelamin;
+    const st = ((m.status_khusus || '') + '').toLowerCase().trim();
+    return (
+      jk === 'P' &&
+      (st === 'hamil_t1' ||
+        st === 'hamil_trimester_1' ||
+        st.includes('trimester 1') ||
+        st.includes('trimester_1') ||
+        st.includes('hamil 1') ||
+        st.includes('bumil t1') ||
+        st.includes('bumil_t1'))
+    );
+  });
+
+  // d. Ambil Katalog Resep & Relasi Bahan dengan Filter Keamanan Ketat
+  const rawCatalogResep = await prisma.resep.findMany({
     include: {
       resep_bahan: {
         include: { bahan: true },
       },
     },
+  });
+
+  const catalogResep = rawCatalogResep.filter((r) => {
+    // 1. Resep RSP025 selalu NONAKTIF di MVP
+    if (
+      r.kode_resep === 'RSP025' ||
+      r.kode_resep?.toUpperCase() === 'RSP025' ||
+      r.nama_resep.toLowerCase().includes('rsp025') ||
+      (r.kategori === 'Menu Anak' && r.nama_resep.toLowerCase().includes('hati'))
+    ) {
+      return false;
+    }
+
+    // 2. Alergen sekeluarga: Jika salah satu anggota alergi, resep disingkirkan dari seluruh keluarga
+    if (familyAllergens.size > 0) {
+      const namaResepLower = r.nama_resep.toLowerCase();
+      for (const al of familyAllergens) {
+        if (namaResepLower.includes(al)) return false;
+      }
+
+      for (const rb of r.resep_bahan) {
+        const bahanName = rb.bahan.nama_bahan.toLowerCase();
+        for (const al of familyAllergens) {
+          if (bahanName.includes(al)) return false;
+        }
+        if (rb.bahan.alergen && Array.isArray(rb.bahan.alergen)) {
+          for (const ba of rb.bahan.alergen) {
+            if (familyAllergens.has(ba.toLowerCase().trim())) return false;
+          }
+        }
+      }
+    }
+
+    // 3. Batas Hati Ayam: Dilarang untuk keluarga dengan anak usia 2-3 tahun atau bumil trimester 1
+    const isMenuHati =
+      r.kode_resep === 'RSP004' ||
+      r.nama_resep.toLowerCase().includes('hati ayam') ||
+      r.resep_bahan.some(
+        (rb) =>
+          rb.kode_tkpi === 'CD005' ||
+          rb.kode_tkpi === 'BHN-003' ||
+          rb.bahan.nama_bahan.toLowerCase().includes('hati ayam')
+      );
+
+    if (isMenuHati && (hasToddler || hasBumilT1)) {
+      return false; // Jangan sediakan di katalog untuk AI jika ada balita / bumil T1
+    }
+
+    return true;
   });
 
   // 4. Ambil Standar AKG
@@ -426,7 +512,17 @@ ${family.members
   )
   .join('\n')}
 
-KATALOG RESEP YANG TERSEDIA:
+KEAMANAN GIZI & KESELAMATAN KELUARGA (WAJIB DIIKUTI SECARA KETAT, TANPA TOLERANSI):
+1. Hati Ayam (RSP004):
+   - Maksimal dijadwalkan HANYA 1 KALI dalam seminggu untuk seluruh jadwal 7 hari.
+   - Jika keluarga memiliki anak usia 2-3 tahun ATAU ibu hamil trimester 1: DILARANG KERAS MENJADWALKAN HATI AYAM (0 KALI) untuk mencegah risiko toksisitas retinol / teratogenik.
+2. Resep RSP025 (Bubur Tim Hati Ayam dan Kelor):
+   - Berstatus NONAKTIF dan DILARANG DIGUNAKAN sama sekali.
+3. Aturan Alergen Sekeluarga (Household Allergen Exclusion):
+   - Alergen dari SATU anggota keluarga menyingkirkan resep tersebut dari menu SELURUH KELUARGA (tidak boleh dimasak demi mencegah risiko kontaminasi silang).
+   - Daftar Alergen Terlarang Keluarga Ini: ${Array.from(familyAllergens).join(', ') || 'Tidak ada'}.
+
+KATALOG RESEP YANG TERSEDIA (HANYA PILIH DARI RESEP AMAN BERIKUT):
 ${catalogResep
   .map(
     (r) =>
@@ -515,7 +611,60 @@ ATURAN BISNIS & KALKULASI PORSI KITA (WAJIB DIIKUTI SECARA KETAT):
 
   const parsedPlan: GeminiMealPlanResponse = JSON.parse(finalJsonText);
 
-  // 8. Simpan ke Database (Tabel 'meal_plans') jika saveToDatabase = true
+  // 8. Sanitasi & Penegakan Keamanan Gizi 100% pada Output AI
+  let pemakaianHatiAyamMingguIni = 0;
+  if (parsedPlan && Array.isArray(parsedPlan.jadwal_harian)) {
+    const sanitizeMeal = (dish: {
+      kode_resep: string;
+      nama_resep: string;
+      kategori?: string;
+      porsi_standar?: string;
+      estimasi_biaya_rp: number;
+    }) => {
+      if (!dish) return dish;
+      // a. Nonaktifkan RSP025 mutlak
+      if (dish.kode_resep === 'RSP025' || dish.nama_resep?.toLowerCase().includes('rsp025')) {
+        dish.kode_resep = 'RSP002';
+        dish.nama_resep = 'Nasi Tim Ayam Bayam';
+        dish.kategori = 'Makanan Pokok';
+      }
+
+      // b. Cek Hati Ayam (max 1x seminggu, 0x jika balita 2-3 th atau bumil T1)
+      const isHati = dish.kode_resep === 'RSP004' || dish.nama_resep?.toLowerCase().includes('hati ayam');
+      if (isHati) {
+        if (hasToddler || hasBumilT1 || pemakaianHatiAyamMingguIni >= 1) {
+          dish.kode_resep = 'RSP003';
+          dish.nama_resep = 'Sup Ayam Sayuran';
+          dish.kategori = 'Lauk Hewani';
+        } else {
+          pemakaianHatiAyamMingguIni++;
+        }
+      }
+
+      // c. Cek Alergen sekeluarga
+      if (familyAllergens.size > 0) {
+        const dishName = dish.nama_resep?.toLowerCase() || '';
+        for (const al of familyAllergens) {
+          if (dishName.includes(al)) {
+            dish.kode_resep = 'RSP003';
+            dish.nama_resep = 'Sup Ayam Sayuran';
+            dish.kategori = 'Lauk Hewani';
+            break;
+          }
+        }
+      }
+      return dish;
+    };
+
+    for (const h of parsedPlan.jadwal_harian) {
+      if (h.sarapan) sanitizeMeal(h.sarapan);
+      if (h.makan_siang) sanitizeMeal(h.makan_siang);
+      if (h.makan_malam) sanitizeMeal(h.makan_malam);
+      if (h.selingan) sanitizeMeal(h.selingan);
+    }
+  }
+
+  // 9. Simpan ke Database (Tabel 'meal_plans') jika saveToDatabase = true
   let savedMealPlan = null;
   if (saveToDatabase) {
     savedMealPlan = await prisma.mealPlan.create({

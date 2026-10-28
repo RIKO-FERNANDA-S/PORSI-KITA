@@ -19,13 +19,19 @@ export function cariPenggantiHidangan(
   anggotaList: Anggota[],
   pemakaianHatiAyamMingguIni: number = 0
 ): OpsiPenggantiHidangan[] {
+  // Jika hidangan yang hendak diganti adalah hati ayam, kurangi hitungan untuk mengevaluasi opsi pengganti
+  const hatiCountForCheck =
+    resepLama.kode === 'RSP004' || resepLama.nama.toLowerCase().includes('hati ayam')
+      ? Math.max(0, pemakaianHatiAyamMingguIni - 1)
+      : pemakaianHatiAyamMingguIni;
+
   const kandidat = RESEP_LIST.filter((r) => {
     if (r.kode === resepLama.kode) return false;
-    if (r.kode === 'RSP025') return false; // RSP025 selalu nonaktif di MVP
+    if (r.kode === 'RSP025' || r.kode?.toUpperCase() === 'RSP025') return false; // RSP025 selalu nonaktif di MVP
     if (r.kategori !== resepLama.kategori) return false;
 
-    // Periksa keamanan alergen dan hati ayam
-    const check = isResepAmanUntukKeluarga(r, anggotaList, pemakaianHatiAyamMingguIni);
+    // Periksa keamanan alergen seluruh keluarga dan batasan hati ayam
+    const check = isResepAmanUntukKeluarga(r, anggotaList, hatiCountForCheck);
     return check.aman;
   });
 
