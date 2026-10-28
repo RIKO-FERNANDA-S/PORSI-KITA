@@ -128,10 +128,16 @@ export default function Sidebar({
     setModalFeedback({ type: '', msg: '' });
 
     try {
+      const rawMeta = localStorage.getItem('porsi_kita_auth_meta');
+      const meta = rawMeta ? JSON.parse(rawMeta) : {};
+      const storedKeluarga = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('porsi_kita_keluarga') || '{}') : {};
+
       const res = await fetch('/api/auth/set-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          phone: meta.phone || '',
+          familyId: storedKeluarga?.id || meta.familyId || '',
           newPassword: newPasswordInput,
           confirmPassword: repeatPasswordInput,
         }),
@@ -147,9 +153,7 @@ export default function Sidebar({
       setModalFeedback({ type: 'success', msg: 'Kata sandi berhasil disimpan!' });
 
       // Update auth_meta
-      const rawMeta = localStorage.getItem('porsi_kita_auth_meta');
-      if (rawMeta) {
-        const meta = JSON.parse(rawMeta);
+      if (typeof window !== 'undefined') {
         meta.hasPassword = true;
         delete meta.hasLoggedOutAfterOtp;
         localStorage.setItem('porsi_kita_auth_meta', JSON.stringify(meta));

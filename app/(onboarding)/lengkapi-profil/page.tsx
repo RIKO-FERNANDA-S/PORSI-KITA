@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import BrandLogo from '../../../components/BrandLogo';
 import { Anggota, Keluarga } from '../../../lib/types';
 import { saveStoredKeluarga, saveStoredAnggota, setStoredOnboarded } from '../../../lib/store';
+import { profilKeluargaFormSchema } from '../../../lib/schemas';
 
 export default function LengkapiProfilPage() {
   const router = useRouter();
@@ -12,7 +13,8 @@ export default function LengkapiProfilPage() {
   // State Profil Keluarga
   const [namaKeluarga, setNamaKeluarga] = useState('');
   const [wilayah, setWilayah] = useState('Pasar Tradisional • Jakarta Selatan');
-  const [budgetHarian, setBudgetHarian] = useState('75000');
+  const [budgetBelanja, setBudgetBelanja] = useState('3000000');
+  const [tipeBudget, setTipeBudget] = useState<'bulanan' | 'mingguan'>('bulanan');
   const [userPhone, setUserPhone] = useState('');
 
   // State Anggota Keluarga Awal (Minimal 1 Orang: Kepala Keluarga/Pengguna)
@@ -29,6 +31,10 @@ export default function LengkapiProfilPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // State Error Zod Terstruktur (Field Level & Member Level)
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [memberErrors, setMemberErrors] = useState<Record<string, Record<string, string>>>({});
 
   useEffect(() => {
     try {
@@ -73,34 +79,114 @@ export default function LengkapiProfilPage() {
 
   const handleRemoveMember = (id: string) => {
     if (anggotaList.length <= 1) {
-      alert('Minimal harus ada 1 anggota keluarga.');
+      setErrorMsg('Minimal harus ada 1 anggota keluarga yang didaftarkan.');
       return;
     }
     setAnggotaList((prev) => prev.filter((m) => m.id !== id));
+    setMemberErrors((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   const handleUpdateMember = (id: string, field: keyof Anggota, val: any) => {
     setAnggotaList((prev) =>
       prev.map((m) => (m.id === id ? { ...m, [field]: val } : m))
     );
+    // Bersihkan error per-field anggota seketika saat pengguna mengetik/mengubah
+    if (memberErrors[id]?.[field as string]) {
+      setMemberErrors((prev) => {
+        const next = { ...prev };
+        if (next[id]) {
+          const memberCopy = { ...next[id] };
+          delete memberCopy[field as string];
+          next[id] = memberCopy;
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleNamaKeluargaChange = (val: string) => {
+    setNamaKeluarga(val);
+    if (formErrors.namaKeluarga) {
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next.namaKeluarga;
+        return next;
+      });
+    }
+  };
+
+  const handleBudgetChange = (val: string) => {
+    setBudgetBelanja(val);
+    if (formErrors.budgetBelanja || formErrors.budgetHarian) {
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next.budgetBelanja;
+        delete next.budgetHarian;
+        return next;
+      });
+    }
+  };
+
+  const handleWilayahChange = (val: string) => {
+    setWilayah(val);
+    if (formErrors.wilayah) {
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next.wilayah;
+        return next;
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!namaKeluarga.trim()) {
-      setErrorMsg('Nama keluarga wajib diisi.');
+    // Validasi Zod Menyeluruh (Keluarga & Seluruh Anggota)
+    const rawBudgetDigits = budgetBelanja.toString().replace(/\D/g, '');
+    const parsedNominal = rawBudgetDigits ? parseInt(rawBudgetDigits, 10) : 3000000;
+    const totalBulanan = tipeBudget === 'mingguan' ? parsedNominal * 4 : parsedNominal;
+    const calculatedDailyBudget = Math.round(totalBulanan / 30);
+
+    const validationResult = profilKeluargaFormSchema.safeParse({
+      namaKeluarga,
+      budgetHarian: calculatedDailyBudget,
+      wilayah,
+      anggota: anggotaList,
+    });
+
+    if (!validationResult.success) {
+      const fieldErrors: Record<string, string> = {};
+      const mErrors: Record<string, Record<string, string>> = {};
+
+      for (const issue of validationResult.error.issues) {
+        if (issue.path[0] === 'anggota' && typeof issue.path[1] === 'number') {
+          const memberIndex = issue.path[1];
+          const memberField = (issue.path[2] as string) || 'alias';
+          const targetMember = anggotaList[memberIndex];
+          if (targetMember) {
+            if (!mErrors[targetMember.id]) {
+              mErrors[targetMember.id] = {};
+            }
+            mErrors[targetMember.id][memberField] = issue.message;
+          }
+        } else {
+          fieldErrors[issue.path[0] as string] = issue.message;
+        }
+      }
+
+      setFormErrors(fieldErrors);
+      setMemberErrors(mErrors);
+      setErrorMsg('Terdapat isian formulir yang belum sesuai. Silakan periksa tanda peringatan merah pada input di bawah.');
       return;
     }
 
-    const invalidMember = anggotaList.find((m) => !m.alias.trim());
-    if (invalidMember) {
-      setErrorMsg('Semua nama/alias anggota keluarga wajib diisi.');
-      return;
-    }
-
-    const parsedBudget = parseInt(budgetHarian.replace(/\D/g, ''), 10) || 75000;
+    setFormErrors({});
+    setMemberErrors({});
     setLoading(true);
 
     try {
@@ -112,7 +198,9 @@ export default function LengkapiProfilPage() {
           phone: userPhone || '+6281200000000',
           nama: namaKeluarga.trim(),
           wilayah,
-          budget_harian_rp: parsedBudget,
+          tipe_budget: tipeBudget,
+          budget_belanja: parsedNominal,
+          budget_harian_rp: calculatedDailyBudget,
           anggota: anggotaList,
         }),
       });
@@ -128,7 +216,9 @@ export default function LengkapiProfilPage() {
         id: data.family?.id || `kel-${Date.now()}`,
         alias: namaKeluarga.trim(),
         wilayah,
-        budget_harian_rp: parsedBudget,
+        budget_harian_rp: calculatedDailyBudget,
+        budget_belanja: parsedNominal,
+        tipe_budget: tipeBudget,
       };
 
       saveStoredKeluarga(kData);
@@ -198,43 +288,133 @@ export default function LengkapiProfilPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-[#0D0101]">Nama Profil Keluarga:</label>
+                <label className="text-xs font-bold text-[#0D0101]">
+                  Nama Profil Keluarga <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={namaKeluarga}
-                  onChange={(e) => setNamaKeluarga(e.target.value)}
+                  onChange={(e) => handleNamaKeluargaChange(e.target.value)}
                   placeholder="misal: Keluarga Bu Samantha"
                   required
-                  className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm font-semibold bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
+                  className={`px-4 py-2.5 rounded-xl border text-sm font-semibold transition ${
+                    formErrors.namaKeluarga
+                      ? 'border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400'
+                      : 'border-stone-200 bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#306a3b]'
+                  }`}
                 />
+                {formErrors.namaKeluarga && (
+                  <p className="text-[12px] text-rose-600 font-medium flex items-center gap-1 mt-0.5">
+                    <span>⚠️</span> {formErrors.namaKeluarga}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-[#0D0101]">Target Budget Belanja Harian:</label>
+                <label className="text-xs font-bold text-[#0D0101]">
+                  Target Budget Belanja <span className="text-rose-500">*</span>
+                </label>
+                
+                {/* Toggle Bulanan / Mingguan */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-stone-100 rounded-xl mb-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTipeBudget('bulanan');
+                      setBudgetBelanja('3000000');
+                    }}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      tipeBudget === 'bulanan'
+                        ? 'bg-white text-[#0C4B20] shadow-xs'
+                        : 'text-stone-600 hover:text-[#0D0101]'
+                    }`}
+                  >
+                    📅 Bulanan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTipeBudget('mingguan');
+                      setBudgetBelanja('750000');
+                    }}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      tipeBudget === 'mingguan'
+                        ? 'bg-white text-[#0C4B20] shadow-xs'
+                        : 'text-stone-600 hover:text-[#0D0101]'
+                    }`}
+                  >
+                    📆 Mingguan
+                  </button>
+                </div>
+
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
                     Rp
                   </span>
                   <input
-                    type="number"
-                    min="10000"
-                    max="1000000"
-                    step="5000"
-                    value={budgetHarian}
-                    onChange={(e) => setBudgetHarian(e.target.value)}
+                    type="text"
+                    value={Number(budgetBelanja).toLocaleString('id-ID')}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, '');
+                      setBudgetBelanja(raw || '0');
+                      if (formErrors.budgetHarian) {
+                        setFormErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.budgetHarian;
+                          return next;
+                        });
+                      }
+                    }}
                     required
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 text-sm font-semibold bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
+                    placeholder={tipeBudget === 'mingguan' ? 'Contoh: 750.000' : 'Contoh: 3.000.000'}
+                    className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm font-semibold transition ${
+                      formErrors.budgetHarian
+                        ? 'border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400'
+                        : 'border-stone-200 bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#306a3b]'
+                    }`}
                   />
                 </div>
+
+                {/* Info perhitungan otomatis */}
+                {(() => {
+                  const num = parseInt(budgetBelanja.replace(/\D/g, '') || '0', 10);
+                  const totalBulanan = tipeBudget === 'mingguan' ? num * 4 : num;
+                  const perHari = Math.round(totalBulanan / 30);
+                  return (
+                    <div className="text-[11px] text-stone-600 bg-stone-50 p-2 rounded-lg border border-stone-200/60 mt-1">
+                      {tipeBudget === 'mingguan' ? (
+                        <span>
+                          💡 <strong>Rp {num.toLocaleString('id-ID')}</strong>/minggu × 4 = <strong>Rp {totalBulanan.toLocaleString('id-ID')}</strong>/bulan (~Rp {perHari.toLocaleString('id-ID')}/hari)
+                        </span>
+                      ) : (
+                        <span>
+                          💡 <strong>Rp {num.toLocaleString('id-ID')}</strong>/bulan (~Rp {perHari.toLocaleString('id-ID')}/hari)
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {formErrors.budgetHarian && (
+                  <p className="text-[12px] text-rose-600 font-medium flex items-center gap-1 mt-0.5">
+                    <span>⚠️</span> {formErrors.budgetHarian}
+                  </p>
+                )}
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-[#0D0101]">Acuan Pasar Tradisional / Wilayah:</label>
+              <label className="text-xs font-bold text-[#0D0101]">
+                Acuan Pasar Tradisional / Wilayah <span className="text-rose-500">*</span>
+              </label>
               <select
                 value={wilayah}
-                onChange={(e) => setWilayah(e.target.value)}
-                className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm font-semibold bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#306a3b] cursor-pointer"
+                onChange={(e) => handleWilayahChange(e.target.value)}
+                className={`px-4 py-2.5 rounded-xl border text-sm font-semibold transition cursor-pointer ${
+                  formErrors.wilayah
+                    ? 'border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400'
+                    : 'border-stone-200 bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#306a3b]'
+                }`}
               >
                 <option value="Pasar Tradisional • Jakarta Selatan">Pasar Tradisional • Jakarta Selatan</option>
                 <option value="Pasar Tebet Barat • Jakarta Selatan">Pasar Tebet Barat • Jakarta Selatan</option>
@@ -242,6 +422,11 @@ export default function LengkapiProfilPage() {
                 <option value="Supermarket Segar • Jabodetabek">Supermarket Segar • Jabodetabek</option>
                 <option value="Surabaya, Jawa Timur">Pasar Tradisional • Surabaya, Jawa Timur</option>
               </select>
+              {formErrors.wilayah && (
+                <p className="text-[12px] text-rose-600 font-medium flex items-center gap-1 mt-0.5">
+                  <span>⚠️</span> {formErrors.wilayah}
+                </p>
+              )}
             </div>
           </div>
 
@@ -260,6 +445,12 @@ export default function LengkapiProfilPage() {
                 <span>+</span> Tambah Anggota
               </button>
             </div>
+
+            {formErrors.anggota && (
+              <p className="text-xs text-rose-600 font-medium">
+                ⚠️ {formErrors.anggota}
+              </p>
+            )}
 
             <div className="flex flex-col gap-3">
               {anggotaList.map((m, index) => (
@@ -284,19 +475,32 @@ export default function LengkapiProfilPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-semibold text-stone-600">Nama Panggilan:</label>
+                      <label className="text-[11px] font-semibold text-stone-600">
+                        Nama Panggilan <span className="text-rose-500">*</span>:
+                      </label>
                       <input
                         type="text"
                         value={m.alias}
                         onChange={(e) => handleUpdateMember(m.id, 'alias', e.target.value)}
                         placeholder="misal: Ibu, Ayah, Rian"
                         required
-                        className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
+                        className={`px-3 py-2 rounded-xl border text-xs font-semibold bg-white transition ${
+                          memberErrors[m.id]?.alias
+                            ? 'border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400'
+                            : 'border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#306a3b]'
+                        }`}
                       />
+                      {memberErrors[m.id]?.alias && (
+                        <p className="text-[11px] text-rose-600 font-medium mt-0.5">
+                          {memberErrors[m.id].alias}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-semibold text-stone-600">Usia (Tahun):</label>
+                      <label className="text-[11px] font-semibold text-stone-600">
+                        Usia (Tahun) <span className="text-rose-500">*</span>:
+                      </label>
                       <input
                         type="number"
                         min="2"
@@ -306,8 +510,17 @@ export default function LengkapiProfilPage() {
                           handleUpdateMember(m.id, 'usia_tahun', parseInt(e.target.value, 10) || 0)
                         }
                         required
-                        className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
+                        className={`px-3 py-2 rounded-xl border text-xs font-semibold bg-white transition ${
+                          memberErrors[m.id]?.usia_tahun
+                            ? 'border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400'
+                            : 'border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#306a3b]'
+                        }`}
                       />
+                      {memberErrors[m.id]?.usia_tahun && (
+                        <p className="text-[11px] text-rose-600 font-medium mt-0.5 leading-snug">
+                          {memberErrors[m.id].usia_tahun}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-1">

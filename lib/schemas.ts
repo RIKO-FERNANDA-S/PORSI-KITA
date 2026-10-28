@@ -83,3 +83,75 @@ export const anggotaSchema = z
   );
 
 export type AnggotaFormData = z.infer<typeof anggotaSchema>;
+
+// Skema Validasi Formulir Lengkapi Profil / Onboarding Form (FR-03 & FR-04)
+export const profilKeluargaFormSchema = z.object({
+  namaKeluarga: z
+    .string({ message: 'Nama profil keluarga wajib diisi' })
+    .trim()
+    .min(2, { message: 'Nama profil keluarga minimal 2 karakter' })
+    .max(50, { message: 'Nama profil keluarga maksimal 50 karakter' }),
+  budgetHarian: z
+    .number({ message: 'Target budget belanja harian harus berupa angka' })
+    .min(10000, { message: 'Target budget harian minimal Rp 10.000' })
+    .max(1000000, { message: 'Target budget harian maksimal Rp 1.000.000' }),
+  wilayah: z
+    .string({ message: 'Acuan pasar/wilayah wajib dipilih' })
+    .trim()
+    .min(2, { message: 'Pilih acuan pasar atau wilayah yang valid' }),
+  anggota: z
+    .array(
+      z.object({
+        id: z.string(),
+        alias: z
+          .string()
+          .trim()
+          .min(2, { message: 'Nama panggilan anggota minimal 2 karakter' })
+          .max(30, { message: 'Nama panggilan anggota maksimal 30 karakter' }),
+        usia_tahun: z
+          .number({ message: 'Usia harus diisi angka tahun' })
+          .int({ message: 'Usia harus berupa bilangan bulat' })
+          .min(2, {
+            message:
+              'Batasan Produk: Anak minimal berusia 2 tahun ke atas (usia di bawah 2 tahun / MPASI belum didukung).',
+          })
+          .max(120, { message: 'Usia maksimal 120 tahun' }),
+        jenis_kelamin: z.enum(['L', 'P'], {
+          message: 'Pilih jenis kelamin Laki-laki atau Perempuan',
+        }),
+        status: z.string().default('umum'),
+        alergen: z.array(z.string()).default([]),
+      })
+    )
+    .min(1, { message: 'Minimal harus ada 1 anggota keluarga yang didaftarkan' }),
+});
+
+export type ProfilKeluargaFormData = z.infer<typeof profilKeluargaFormSchema>;
+
+// Skema Validasi Set Password Baru (Popup Keamanan & Pengaturan)
+export const setPasswordSchema = z
+  .object({
+    newPassword: z
+      .string({ message: 'Kata sandi baru wajib diisi' })
+      .min(6, { message: 'Kata sandi baru minimal 6 karakter demi keamanan akun.' })
+      .max(100, { message: 'Kata sandi maksimal 100 karakter.' }),
+    confirmPassword: z.string().optional(),
+    phone: z.string().optional(),
+    familyId: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.confirmPassword && data.newPassword !== data.confirmPassword) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'Ulangi kata sandi baru tidak cocok dengan kata sandi baru.',
+      path: ['confirmPassword'],
+    }
+  );
+
+export type SetPasswordFormData = z.infer<typeof setPasswordSchema>;
+
+

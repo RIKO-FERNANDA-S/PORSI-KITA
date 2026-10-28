@@ -39,11 +39,12 @@ export default function PengaturanKeluargaPage() {
     posyanduSync: false,
   });
 
-  // Modal State untuk Ubah Nomor HP / Ganti Password
+  // Modal State untuk Ubah Nomor HP / Ganti Password / Budget
   const [modalMode, setModalMode] = useState<'none' | 'phone' | 'password' | 'budget'>('none');
   const [phoneInput, setPhoneInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [budgetInput, setBudgetInput] = useState('');
+  const [keluargaTipeBudget, setKeluargaTipeBudget] = useState<'bulanan' | 'mingguan'>('bulanan');
 
   useEffect(() => {
     try {
@@ -51,7 +52,11 @@ export default function PengaturanKeluargaPage() {
       const a = getStoredAnggota();
       setKeluarga(k);
       setAnggotaList(a);
-      setBudgetInput(k.budget_harian_rp.toString());
+      const initialNominal = k.budget_belanja || (k.budget_harian_rp ? k.budget_harian_rp * 30 : 3000000);
+      setBudgetInput(initialNominal.toString());
+      if (k.tipe_budget) {
+        setKeluargaTipeBudget(k.tipe_budget);
+      }
       if (k.wilayah) {
         setSelectedMarket(k.wilayah);
       }
@@ -83,17 +88,48 @@ export default function PengaturanKeluargaPage() {
     showToast('Nomor HP akun berhasil diperbarui!');
   };
 
-  // 2. Simpan Password Baru
-  const handleSavePassword = (e: React.FormEvent) => {
+  // 2. Simpan Password Baru ke Database
+  const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordInput.length < 6) {
-      alert('Password minimal 6 karakter');
+      alert('Password minimal 6 karakter demi keamanan akun.');
       return;
     }
-    setLastPasswordUpdate('Baru saja');
-    setModalMode('none');
-    setPasswordInput('');
-    showToast('Kata sandi berhasil diperbarui!');
+
+    try {
+      const rawMeta = localStorage.getItem('porsi_kita_auth_meta');
+      const meta = rawMeta ? JSON.parse(rawMeta) : {};
+
+      const res = await fetch('/api/auth/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: meta.phone || phone || '',
+          familyId: keluarga?.id || meta.familyId || '',
+          newPassword: passwordInput,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Gagal menyimpan kata sandi ke database.');
+        return;
+      }
+
+      setLastPasswordUpdate('Baru saja');
+      setModalMode('none');
+      setPasswordInput('');
+
+      if (typeof window !== 'undefined') {
+        meta.hasPassword = true;
+        localStorage.setItem('porsi_kita_auth_meta', JSON.stringify(meta));
+      }
+
+      showToast('Kata sandi berhasil diperbarui dan tersimpan ke database!');
+    } catch {
+      alert('Terjadi kesalahan koneksi saat menyimpan kata sandi.');
+    }
   };
 
   // 3. Simpan Acuan Pasar Lokal
@@ -108,20 +144,42 @@ export default function PengaturanKeluargaPage() {
     }
   };
 
-  // 4. Ubah Budget Harian
-  const handleSaveBudget = (e: React.FormEvent) => {
+  // 4. Ubah Budget Belanja (Bulanan / Mingguan)
+  const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!keluarga) return;
     const val = parseInt(budgetInput.replace(/\D/g, ''), 10);
-    if (isNaN(val) || val < 10000 || val > 1000000) {
-      alert('Budget harian harus antara Rp 10.000 s/d Rp 1.000.000');
+    if (isNaN(val) || val <= 0) {
+      alert('Nominal budget belanja harus lebih dari Rp 0.');
       return;
     }
-    const updated = { ...keluarga, budget_harian_rp: val };
+    const totalBulanan = keluargaTipeBudget === 'mingguan' ? val * 4 : val;
+    const daily = Math.round(totalBulanan / 30);
+    const updated = {
+      ...keluarga,
+      budget_belanja: val,
+      tipe_budget: keluargaTipeBudget,
+      budget_harian_rp: daily,
+    };
     setKeluarga(updated);
     saveStoredKeluarga(updated);
+
+    try {
+      await fetch('/api/family/budget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          budget_belanja: val,
+          tipe_budget: keluargaTipeBudget,
+          phone: phone,
+        }),
+      });
+    } catch {
+      // fallback
+    }
+
     setModalMode('none');
-    showToast(`Budget harian disimpan: Rp ${val.toLocaleString('id-ID')}`);
+    showToast(`Budget belanja berhasil disimpan: Rp ${val.toLocaleString('id-ID')} (${keluargaTipeBudget})`);
   };
 
   // 5. Tambah & Hapus Alergi
@@ -402,24 +460,28 @@ export default function PengaturanKeluargaPage() {
 
                 <div className="w-full h-px bg-stone-100" />
 
-                {/* Row 3: Anggaran Harian Belanja */}
+                {/* Row 3: Anggaran Belanja Keluarga */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex flex-col">
                     <span className="text-[14px] font-bold text-[#2c1514]">
-                      Budget Belanja Harian
+                      Budget Belanja Keluarga ({keluarga.tipe_budget === 'mingguan' ? 'Mingguan' : 'Bulanan'})
                     </span>
                     <span className="text-[15px] font-black text-[#306a3b] mt-0.5">
-                      Rp {keluarga.budget_harian_rp.toLocaleString('id-ID')} / hari
+                      Rp {(keluarga.budget_belanja || keluarga.budget_harian_rp * 30).toLocaleString('id-ID')}
+                      {keluarga.tipe_budget === 'mingguan' ? ' / minggu' : ' / bulan'}
                     </span>
                     <span className="text-[12px] text-[#737a65]">
-                      ~Rp {(keluarga.budget_harian_rp * 7).toLocaleString('id-ID')} per minggu
+                      {keluarga.tipe_budget === 'mingguan'
+                        ? `Total 1 Bulan: Rp ${((keluarga.budget_belanja || 750000) * 4).toLocaleString('id-ID')} (~Rp ${keluarga.budget_harian_rp.toLocaleString('id-ID')}/hari)`
+                        : `Estimasi harian: ~Rp ${keluarga.budget_harian_rp.toLocaleString('id-ID')} / hari`}
                     </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => {
-                      setBudgetInput(keluarga.budget_harian_rp.toString());
+                      setBudgetInput((keluarga.budget_belanja || keluarga.budget_harian_rp * 30).toString());
+                      if (keluarga.tipe_budget) setKeluargaTipeBudget(keluarga.tipe_budget);
                       setModalMode('budget');
                     }}
                     className="min-h-[44px] px-4 py-2 rounded-xl bg-[#fff0ef] text-[#2c1514] text-[13px] font-bold hover:bg-[#ffe2df] transition flex items-center justify-center self-start sm:self-auto cursor-pointer"
@@ -899,21 +961,74 @@ export default function PengaturanKeluargaPage() {
             {modalMode === 'budget' && (
               <form onSubmit={handleSaveBudget} className="flex flex-col gap-3">
                 <label className="text-xs font-semibold text-[#737a65]">
-                  Budget Belanja Harian (Rp 10.000 s/d Rp 1.000.000):
+                  Tipe Periode Budget:
                 </label>
-                <input
-                  type="number"
-                  min="10000"
-                  max="1000000"
-                  step="5000"
-                  value={budgetInput}
-                  onChange={(e) => setBudgetInput(e.target.value)}
-                  className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
-                  required
-                />
+                <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setKeluargaTipeBudget('bulanan')}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      keluargaTipeBudget === 'bulanan'
+                        ? 'bg-white text-[#0C4B20] shadow-xs'
+                        : 'text-stone-600 hover:text-[#0D0101]'
+                    }`}
+                  >
+                    📅 Bulanan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKeluargaTipeBudget('mingguan')}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      keluargaTipeBudget === 'mingguan'
+                        ? 'bg-white text-[#0C4B20] shadow-xs'
+                        : 'text-stone-600 hover:text-[#0D0101]'
+                    }`}
+                  >
+                    📆 Mingguan
+                  </button>
+                </div>
+
+                <label className="text-xs font-semibold text-[#737a65]">
+                  {keluargaTipeBudget === 'mingguan'
+                    ? 'Nominal Budget per Minggu (Rp):'
+                    : 'Nominal Budget per Bulan (Rp):'}
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
+                    Rp
+                  </span>
+                  <input
+                    type="text"
+                    value={Number(budgetInput.replace(/\D/g, '') || 0).toLocaleString('id-ID')}
+                    onChange={(e) => setBudgetInput(e.target.value.replace(/\D/g, ''))}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
+                    required
+                  />
+                </div>
+
+                {/* Info preview */}
+                {(() => {
+                  const num = parseInt(budgetInput.replace(/\D/g, '') || '0', 10);
+                  const totalBulanan = keluargaTipeBudget === 'mingguan' ? num * 4 : num;
+                  const perHari = Math.round(totalBulanan / 30);
+                  return (
+                    <div className="text-[11px] text-stone-600 bg-stone-50 p-2.5 rounded-xl border border-stone-200/60">
+                      {keluargaTipeBudget === 'mingguan' ? (
+                        <span>
+                          💡 <strong>Rp {num.toLocaleString('id-ID')}</strong>/minggu × 4 = <strong>Rp {totalBulanan.toLocaleString('id-ID')}</strong>/bulan (~Rp {perHari.toLocaleString('id-ID')}/hari)
+                        </span>
+                      ) : (
+                        <span>
+                          💡 <strong>Rp {num.toLocaleString('id-ID')}</strong>/bulan (~Rp {perHari.toLocaleString('id-ID')}/hari)
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <button
                   type="submit"
-                  className="mt-2 py-3 rounded-full bg-[#6da003] hover:bg-[#466800] text-white font-bold text-sm transition"
+                  className="mt-2 py-3 rounded-full bg-[#6da003] hover:bg-[#466800] text-white font-bold text-sm transition cursor-pointer"
                 >
                   Simpan Anggaran Baru
                 </button>

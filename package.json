@@ -8,12 +8,18 @@
     "start": "next start",
     "lint": " next lint",
     "test": "vitest run",
+    "seed": "prisma db seed",
     "validate:data": "node scripts/validate_data.mjs"
   },
+  "prisma": {
+    "seed": "node --experimental-strip-types prisma/seed.ts"
+  },
   "dependencies": {
+    "@google/genai": "^2.31.0",
     "@prisma/client": "^5.19.1",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "csv-parse": "^7.0.3",
     "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",

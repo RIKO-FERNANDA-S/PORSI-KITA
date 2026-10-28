@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Sidebar from '../../components/Sidebar';
+import { getStoredKeluarga } from '../../lib/store';
 
 interface ShoppingItem {
   id: string;
@@ -38,10 +39,20 @@ export default function DashboardPage() {
   const [selectedDay, setSelectedDay] = useState(15);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   
-  // Keuangan state
-  const [saldo, setSaldo] = useState(2450000);
-  const [totalAnggaran, setTotalAnggaran] = useState(4500000);
-  const [pengeluaran, setPengeluaran] = useState(2050000);
+  // Keuangan & Budget Database State
+  const [saldo, setSaldo] = useState(3000000);
+  const [totalAnggaran, setTotalAnggaran] = useState(3000000);
+  const [pengeluaran, setPengeluaran] = useState(0);
+  const [budgetBelanja, setBudgetBelanja] = useState(3000000);
+  const [tipeBudget, setTipeBudget] = useState<'bulanan' | 'mingguan'>('bulanan');
+  const [loadingBudget, setLoadingBudget] = useState(true);
+
+  // Modal Atur Budget Belanja State
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [inputBudgetNominal, setInputBudgetNominal] = useState('3.000.000');
+  const [inputTipeBudget, setInputTipeBudget] = useState<'bulanan' | 'mingguan'>('bulanan');
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetFeedback, setBudgetFeedback] = useState({ type: '', msg: '' });
   
   // Shopping list state
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>(INITIAL_SHOPPING_LIST);
@@ -69,10 +80,13 @@ export default function DashboardPage() {
   const [isOver24Hours, setIsOver24Hours] = useState<boolean>(false);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [userProfileName, setUserProfileName] = useState('Ibu Samantha');
+  const [userPhone, setUserPhone] = useState('');
 
   useEffect(() => {
     const checkSecurityStatus = async () => {
@@ -87,6 +101,32 @@ export default function DashboardPage() {
       if (meta?.nama) {
         setUserProfileName(meta.nama);
       }
+      if (meta?.phone) {
+        setUserPhone(meta.phone);
+      }
+
+      // Fetch data budget dan saldo real-time dari database
+      const fetchBudgetFromDb = async (phoneToUse?: string) => {
+        try {
+          const query = phoneToUse ? `?phone=${encodeURIComponent(phoneToUse)}` : '';
+          const res = await fetch(`/api/family/budget${query}`);
+          const bData = await res.json();
+
+          if (bData.success) {
+            setBudgetBelanja(bData.budget_belanja);
+            setTipeBudget(bData.tipe_budget || 'bulanan');
+            setTotalAnggaran(bData.total_anggaran);
+            setPengeluaran(bData.pengeluaran);
+            setSaldo(bData.saldo);
+            setInputBudgetNominal(Number(bData.budget_belanja).toLocaleString('id-ID'));
+            setInputTipeBudget(bData.tipe_budget || 'bulanan');
+          }
+        } catch (bErr) {
+          console.warn('Gagal memuat budget dari database:', bErr);
+        } finally {
+          setLoadingBudget(false);
+        }
+      };
 
       try {
         const res = await fetch('/api/auth/check-status', {
@@ -98,6 +138,10 @@ export default function DashboardPage() {
 
         if (data.exists) {
           if (data.alias) setUserProfileName(data.alias);
+          if (data.phone) setUserPhone(data.phone);
+
+          // Panggil budget dengan nomor telepon yang terverifikasi
+          await fetchBudgetFromDb(data.phone || meta?.phone);
 
           if (!data.hasPassword) {
             setHasPassword(false);
@@ -124,6 +168,9 @@ export default function DashboardPage() {
       } catch (err) {
         console.warn('Check security status error:', err);
       }
+
+      // Fallback jika check-status tidak mengembalikan exists
+      await fetchBudgetFromDb(meta?.phone);
 
       // Fallback lokal jika backend tidak terjangkau
       if (meta && !meta.hasPassword) {
@@ -160,12 +207,14 @@ export default function DashboardPage() {
     try {
       const raw = localStorage.getItem('porsi_kita_auth_meta');
       const meta = raw ? JSON.parse(raw) : {};
+      const storedKeluarga = getStoredKeluarga();
 
       const res = await fetch('/api/auth/set-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: meta.phone || '',
+          phone: meta.phone || userPhone || '',
+          familyId: storedKeluarga?.id || meta.familyId || '',
           newPassword: newPasswordInput,
           confirmPassword: confirmPasswordInput,
         }),
@@ -174,12 +223,12 @@ export default function DashboardPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setPasswordError(data.error || 'Gagal menyimpan kata sandi.');
+        setPasswordError(data.error || 'Gagal menyimpan kata sandi ke database.');
         setPasswordLoading(false);
         return;
       }
 
-      setPasswordSuccess('Kata sandi berhasil disimpan! Akun keluarga Anda kini aman.');
+      setPasswordSuccess('Kata sandi berhasil disimpan ke database! Akun keluarga Anda kini aman.');
 
       if (typeof window !== 'undefined') {
         meta.hasPassword = true;
@@ -190,6 +239,8 @@ export default function DashboardPage() {
       setHasPassword(true);
       setHasWarningBadge(false);
       setIsOver24Hours(false);
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
 
       setTimeout(() => {
         setShowSecurityModal(false);
@@ -242,16 +293,89 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedWa(false), 2500);
   };
 
-  // Record expense
-  const handleAddExpense = (e: React.FormEvent) => {
+  // Record expense to database
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseInt(expenseAmount.replace(/\D/g, ''), 10);
     if (isNaN(num) || num <= 0) return;
-    setPengeluaran((prev) => prev + num);
-    setSaldo((prev) => Math.max(0, prev - num));
+
+    try {
+      const res = await fetch('/api/family/transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nominal: num,
+          catatan: expenseNote.trim() || 'Belanja bahan makanan dapur',
+          phone: userPhone,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPengeluaran(data.pengeluaran);
+        setSaldo(data.saldo);
+        setTotalAnggaran(data.total_anggaran);
+      } else {
+        setPengeluaran((prev) => prev + num);
+        setSaldo((prev) => Math.max(0, prev - num));
+      }
+    } catch {
+      setPengeluaran((prev) => prev + num);
+      setSaldo((prev) => Math.max(0, prev - num));
+    }
+
     setShowExpenseModal(false);
     setExpenseAmount('');
     setExpenseNote('');
+  };
+
+  // Save updated budget (Bulanan vs Mingguan) to database
+  const handleSaveBudget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = parseInt(inputBudgetNominal.replace(/\D/g, ''), 10);
+    if (isNaN(raw) || raw <= 0) {
+      setBudgetFeedback({ type: 'error', msg: 'Nominal budget belanja harus lebih dari Rp 0.' });
+      return;
+    }
+
+    setBudgetSaving(true);
+    setBudgetFeedback({ type: '', msg: '' });
+
+    try {
+      const res = await fetch('/api/family/budget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          budget_belanja: raw,
+          tipe_budget: inputTipeBudget,
+          phone: userPhone,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setBudgetFeedback({ type: 'error', msg: data.error || 'Gagal menyimpan budget belanja.' });
+        setBudgetSaving(false);
+        return;
+      }
+
+      setBudgetBelanja(data.budget_belanja);
+      setTipeBudget(data.tipe_budget);
+      setTotalAnggaran(data.total_anggaran);
+      setPengeluaran(data.pengeluaran);
+      setSaldo(data.saldo);
+
+      setBudgetFeedback({ type: 'success', msg: 'Budget belanja berhasil disimpan!' });
+
+      setTimeout(() => {
+        setShowBudgetModal(false);
+        setBudgetFeedback({ type: '', msg: '' });
+      }, 1000);
+    } catch {
+      setBudgetFeedback({ type: 'error', msg: 'Gagal menghubungi server database.' });
+    } finally {
+      setBudgetSaving(false);
+    }
   };
 
   const totalBelanjaEstimasi = shoppingList.reduce((acc, it) => acc + it.price, 0);
@@ -390,7 +514,7 @@ export default function DashboardPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                         </svg>
                         <span className="text-[12px] font-bold uppercase tracking-wider">
-                          Sisa Saldo Bulanan (Mei 2025)
+                          Sisa Saldo Belanja Dapur
                         </span>
                       </div>
 
@@ -399,9 +523,16 @@ export default function DashboardPage() {
                           Rp {saldo.toLocaleString('id-ID')}
                         </span>
                       </div>
-                      <p className="text-[13px] opacity-80 mt-1.5">
-                        dari total anggaran Rp {totalAnggaran.toLocaleString('id-ID')}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <p className="text-[13px] opacity-80">
+                          dari total anggaran <strong className="text-white">Rp {totalAnggaran.toLocaleString('id-ID')}</strong>
+                        </p>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#b2f2b6]/20 text-[#b2f2b6] border border-[#b2f2b6]/30">
+                          {tipeBudget === 'mingguan'
+                            ? `Budget Mingguan (Rp ${budgetBelanja.toLocaleString('id-ID')} × 4)`
+                            : 'Budget Bulanan'}
+                        </span>
+                      </div>
 
                       {/* Ringkasan Alokasi */}
                       <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/10">
@@ -418,7 +549,7 @@ export default function DashboardPage() {
                             Rp {pengeluaran.toLocaleString('id-ID')}
                           </span>
                           <span className="text-[11px] text-[#b2f2b6]/90 mt-0.5">
-                            {Math.round((pengeluaran / totalAnggaran) * 100)}% • Hemat Rp 200rb
+                            {totalAnggaran > 0 ? Math.round((pengeluaran / totalAnggaran) * 100) : 0}% terpakai
                           </span>
                         </div>
                       </div>
@@ -430,7 +561,7 @@ export default function DashboardPage() {
                         type="button"
                         onClick={() => setShowExpenseModal(true)}
                         style={{ backgroundColor: '#6DA003' }}
-                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-white font-semibold text-[14px] shadow-sm transition-all hover:brightness-105 active:scale-95"
+                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-white font-semibold text-[14px] shadow-sm transition-all hover:brightness-105 active:scale-95 cursor-pointer"
                       >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -441,21 +572,17 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          const tambah = prompt('Masukkan nominal penambahan saldo (Rp):', '500000');
-                          if (tambah) {
-                            const val = parseInt(tambah.replace(/\D/g, ''), 10);
-                            if (!isNaN(val) && val > 0) {
-                              setSaldo((prev) => prev + val);
-                              setTotalAnggaran((prev) => prev + val);
-                            }
-                          }
+                          setInputBudgetNominal(budgetBelanja.toLocaleString('id-ID'));
+                          setInputTipeBudget(tipeBudget);
+                          setBudgetFeedback({ type: '', msg: '' });
+                          setShowBudgetModal(true);
                         }}
-                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all font-semibold text-[14px] backdrop-blur-sm"
+                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all font-semibold text-[14px] backdrop-blur-sm cursor-pointer border border-white/10"
                       >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
-                        <span>Tambah Jatah Saldo</span>
+                        <span>Atur Budget Belanja</span>
                       </button>
                     </div>
                   </div>
@@ -987,30 +1114,50 @@ export default function DashboardPage() {
             <form onSubmit={handleSaveSecurityPassword} className="py-4 space-y-3.5">
               <div>
                 <label className="text-xs font-bold text-[#0D0101] block mb-1">
-                  Kata Sandi Baru
+                  Kata Sandi Baru <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={newPasswordInput}
-                  onChange={(e) => setNewPasswordInput(e.target.value)}
-                  placeholder="Minimal 6 karakter"
-                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    placeholder="Minimal 6 karakter"
+                    className="w-full px-4 py-2.5 pr-10 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-800 text-xs font-semibold cursor-pointer select-none"
+                    title={showNewPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+                  >
+                    {showNewPassword ? 'Sembunyi' : 'Lihat'}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="text-xs font-bold text-[#0D0101] block mb-1">
-                  Ulangi Kata Sandi Baru
+                  Ulangi Kata Sandi Baru <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPasswordInput}
-                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                  placeholder="Ulangi kata sandi baru"
-                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    placeholder="Ulangi kata sandi baru"
+                    className="w-full px-4 py-2.5 pr-10 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-800 text-xs font-semibold cursor-pointer select-none"
+                    title={showConfirmPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+                  >
+                    {showConfirmPassword ? 'Sembunyi' : 'Lihat'}
+                  </button>
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2.5">
@@ -1037,6 +1184,162 @@ export default function DashboardPage() {
                   ) : (
                     <span>Simpan Kata Sandi Akun</span>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 7. MODAL ATUR BUDGET BELANJA (BULANAN VS MINGGUAN)        */}
+      {/* ========================================================= */}
+      {showBudgetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-xl shrink-0">
+                  💰
+                </div>
+                <div>
+                  <h3 className="text-[18px] font-bold text-[#0D0101] leading-tight">
+                    Atur Budget Belanja
+                  </h3>
+                  <span className="text-[11px] font-semibold text-[#0C4B20]">
+                    Porsi Kita • Pengaturan Anggaran Dapur
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBudgetModal(false)}
+                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
+                title="Tutup dialog"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-[13px] text-[#5F5F5F] mt-3.5 leading-relaxed">
+              Pilih tipe periode belanja Ibu (bulanan atau mingguan). Jika memilih mingguan, sistem otomatis mengalikan 4 minggu untuk menghitung total anggaran 1 bulan.
+            </p>
+
+            {budgetFeedback.msg && (
+              <div
+                className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                  budgetFeedback.type === 'error'
+                    ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                    : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                }`}
+              >
+                <span>{budgetFeedback.type === 'error' ? '⚠️' : '✓'}</span>
+                <span>{budgetFeedback.msg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveBudget} className="py-4 space-y-4">
+              {/* Tipe Periode Toggle */}
+              <div>
+                <label className="text-xs font-bold text-[#0D0101] block mb-1.5">
+                  Tipe Periode Budget
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setInputTipeBudget('bulanan')}
+                    className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      inputTipeBudget === 'bulanan'
+                        ? 'bg-white text-[#0C4B20] shadow-xs'
+                        : 'text-stone-600 hover:text-[#0D0101]'
+                    }`}
+                  >
+                    📅 Budget Bulanan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputTipeBudget('mingguan')}
+                    className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      inputTipeBudget === 'mingguan'
+                        ? 'bg-white text-[#0C4B20] shadow-xs'
+                        : 'text-stone-600 hover:text-[#0D0101]'
+                    }`}
+                  >
+                    📆 Budget Mingguan
+                  </button>
+                </div>
+              </div>
+
+              {/* Input Nominal Budget */}
+              <div>
+                <label className="text-xs font-bold text-[#0D0101] block mb-1">
+                  {inputTipeBudget === 'mingguan' ? 'Nominal Budget per Minggu (Rp)' : 'Nominal Budget per Bulan (Rp)'}
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-500">
+                    Rp
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={inputBudgetNominal}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, '');
+                      if (!raw) {
+                        setInputBudgetNominal('0');
+                        return;
+                      }
+                      const num = parseInt(raw, 10);
+                      setInputBudgetNominal(num.toLocaleString('id-ID'));
+                    }}
+                    placeholder={inputTipeBudget === 'mingguan' ? 'Contoh: 750.000' : 'Contoh: 3.000.000'}
+                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-stone-300 text-sm font-bold text-[#0D0101] focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                  />
+                </div>
+              </div>
+
+              {/* Live Preview Perhitungan */}
+              {(() => {
+                const num = parseInt(inputBudgetNominal.replace(/\D/g, '') || '0', 10);
+                const totalBulanan = inputTipeBudget === 'mingguan' ? num * 4 : num;
+                const perHari = Math.round(totalBulanan / 30);
+                return (
+                  <div className="p-3.5 rounded-2xl bg-[#F6F8F3] border border-[#0C4B20]/15 space-y-1.5 text-xs text-[#0D0101]">
+                    <div className="flex items-center justify-between font-bold text-[#0C4B20]">
+                      <span>Total Anggaran 1 Bulan:</span>
+                      <span className="text-sm tabular-nums">Rp {totalBulanan.toLocaleString('id-ID')}</span>
+                    </div>
+                    {inputTipeBudget === 'mingguan' && (
+                      <p className="text-[11px] text-stone-600">
+                        *Dihitung dari Rp {num.toLocaleString('id-ID')} × 4 minggu dalam 1 bulan
+                      </p>
+                    )}
+                    <div className="flex items-center justify-between text-stone-600 pt-1 border-t border-[#0C4B20]/10 text-[11px]">
+                      <span>Estimasi batas aman per hari:</span>
+                      <span className="font-semibold tabular-nums text-[#0D0101]">~Rp {perHari.toLocaleString('id-ID')} / hari</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowBudgetModal(false)}
+                  className="min-h-[48px] px-5 py-2.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-bold hover:bg-stone-200 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={budgetSaving}
+                  style={{
+                    background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
+                    boxShadow: '0 4px 12px rgba(109, 160, 3, 0.25)',
+                  }}
+                  className="min-h-[48px] px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:brightness-105 transition shadow-sm cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {budgetSaving ? 'Menyimpan...' : 'Simpan Budget Belanja'}
                 </button>
               </div>
             </form>

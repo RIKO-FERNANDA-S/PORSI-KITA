@@ -41,6 +41,8 @@ export interface Keluarga {
   alias: string;
   wilayah: string;
   budget_harian_rp: number; // Minimal 10.000, maksimal 1.000.000
+  budget_belanja?: number;
+  tipe_budget?: 'bulanan' | 'mingguan';
   created_at?: string;
   updated_at?: string;
 }

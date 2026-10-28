@@ -7,7 +7,7 @@ import { setSessionCookie } from '@/lib/auth-session';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { phone, nama, wilayah, budget_harian_rp, anggota } = body;
+    const { phone, nama, wilayah, budget_harian_rp, budget_belanja, tipe_budget, anggota } = body;
 
     if (!phone) {
       return NextResponse.json({ error: 'Nomor WhatsApp wajib diisi.' }, { status: 400 });
@@ -52,10 +52,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const tipe: 'bulanan' | 'mingguan' = tipe_budget === 'mingguan' ? 'mingguan' : 'bulanan';
+    const nominalBudget = Number(budget_belanja) || (Number(budget_harian_rp) ? (tipe === 'mingguan' ? Number(budget_harian_rp) * 7 : Number(budget_harian_rp) * 30) : 3000000);
+    const totalBulanan = tipe === 'mingguan' ? nominalBudget * 4 : nominalBudget;
+    const dailyBudget = Math.round(totalBulanan / 30);
+
     const familyData = {
       alias: nama.trim(),
       wilayah: wilayah || 'Pasar Tradisional • Jakarta Selatan',
-      budget_harian_rp: Number(budget_harian_rp) || 75000,
+      budget_belanja: nominalBudget,
+      tipe_budget: tipe,
+      budget_harian_rp: dailyBudget,
       phone: formattedPhone,
       has_password: false, // Set status has_password = false
     };

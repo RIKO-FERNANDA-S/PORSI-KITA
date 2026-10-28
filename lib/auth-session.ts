@@ -73,6 +73,20 @@ export function verifySessionToken(token: string): SessionPayload | null {
 }
 
 /**
+ * Ambil session payload dari cookies request saat ini
+ */
+export async function getSessionPayload(): Promise<SessionPayload | null> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    if (!token) return null;
+    return verifySessionToken(token);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Pasang session cookie pada response
  */
 export function setSessionCookie(response: NextResponse, payload: SessionPayload) {
