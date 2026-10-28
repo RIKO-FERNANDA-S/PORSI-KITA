@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     if (session?.familyId) {
       family = await prisma.family.findUnique({
         where: { id: session.familyId },
+        include: { members: true },
       });
     }
 
@@ -31,16 +32,23 @@ export async function GET(req: NextRequest) {
             { phone: `+${cleanPhone}` },
           ],
         },
+        include: { members: true },
       });
     }
 
     if (!family) {
-      family = await prisma.family.findFirst();
+      family = await prisma.family.findFirst({
+        include: { members: true },
+      });
     }
 
     if (!family) {
       return NextResponse.json({
         success: true,
+        alias: 'Keluarga Kita',
+        wilayah: 'Pasar Tradisional',
+        members_count: 0,
+        members: [],
         budget_belanja: 3000000,
         tipe_budget: 'bulanan',
         total_anggaran: 3000000,
@@ -75,6 +83,9 @@ export async function GET(req: NextRequest) {
       success: true,
       family_id: family.id,
       alias: family.alias,
+      wilayah: family.wilayah,
+      members_count: family.members?.length || 0,
+      members: family.members || [],
       budget_belanja: budgetBelanja,
       tipe_budget: tipeBudget,
       total_anggaran: totalAnggaran,

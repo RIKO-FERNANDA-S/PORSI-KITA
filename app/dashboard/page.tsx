@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import Sidebar from '../../components/Sidebar';
-import { getStoredKeluarga } from '../../lib/store';
+import { getStoredKeluarga, getStoredAnggota, getStoredMenu } from '../../lib/store';
+import { buatDaftarBelanjaMingguan } from '../../lib/planner/cost';
+import { RencanaMenu7Hari, MenuHari } from '../../lib/types';
 
 interface ShoppingItem {
   id: string;
@@ -13,32 +14,17 @@ interface ShoppingItem {
   checked: boolean;
 }
 
-const INITIAL_SHOPPING_LIST: ShoppingItem[] = [
-  { id: '1', name: 'Bayam Cabut Segar (2 ikat)', price: 6000, checked: true },
-  { id: '2', name: 'Tempe Papan Daun (2 papan)', price: 8000, checked: true },
-  { id: '3', name: 'Telur Ayam Negeri (1/2 kg)', price: 15000, checked: false },
-  { id: '4', name: 'Ikan Kembung Banjar (1/2 kg)', price: 22000, checked: false },
-  { id: '5', name: 'Jagung Manis Pipil (2 bonggol)', price: 7000, checked: false },
-  { id: '6', name: 'Tahu Sutra Putih (1 kotak)', price: 8000, checked: false },
-  { id: '7', name: 'Bawang Merah & Putih (1/4 kg)', price: 14000, checked: false },
-  { id: '8', name: 'Wortel Berastagi (3 buah)', price: 6000, checked: false },
-];
-
-const DAYS_OF_WEEK = [
-  { day: 'Sen', date: 12 },
-  { day: 'Sel', date: 13 },
-  { day: 'Rab', date: 14 },
-  { day: 'Kam', date: 15, isToday: true },
-  { day: 'Jum', date: 16 },
-  { day: 'Sab', date: 17 },
-  { day: 'Min', date: 18 },
-];
-
 export default function DashboardPage() {
-  const [activeNav, setActiveNav] = useState('beranda');
-  const [selectedDay, setSelectedDay] = useState(15);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(1);
   
+  // Profil & Keluarga Database State
+  const [userProfileName, setUserProfileName] = useState('Keluarga Kita');
+  const [wilayahName, setWilayahName] = useState('Pasar Tradisional');
+  const [membersCount, setMembersCount] = useState(0);
+  const [membersList, setMembersList] = useState<any[]>([]);
+  const [userPhone, setUserPhone] = useState('');
+
   // Keuangan & Budget Database State
   const [saldo, setSaldo] = useState(3000000);
   const [totalAnggaran, setTotalAnggaran] = useState(3000000);
@@ -46,6 +32,9 @@ export default function DashboardPage() {
   const [budgetBelanja, setBudgetBelanja] = useState(3000000);
   const [tipeBudget, setTipeBudget] = useState<'bulanan' | 'mingguan'>('bulanan');
   const [loadingBudget, setLoadingBudget] = useState(true);
+
+  // Rencana Menu Aktif
+  const [rencanaMenu, setRencanaMenu] = useState<RencanaMenu7Hari | null>(null);
 
   // Modal Atur Budget Belanja State
   const [showBudgetModal, setShowBudgetModal] = useState(false);
@@ -55,7 +44,7 @@ export default function DashboardPage() {
   const [budgetFeedback, setBudgetFeedback] = useState({ type: '', msg: '' });
   
   // Shopping list state
-  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>(INITIAL_SHOPPING_LIST);
+  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [copiedWa, setCopiedWa] = useState(false);
 
@@ -85,10 +74,39 @@ export default function DashboardPage() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
-  const [userProfileName, setUserProfileName] = useState('Ibu Samantha');
-  const [userPhone, setUserPhone] = useState('');
 
   useEffect(() => {
+    // 1. Inisialisasi awal cepat dari Local Storage
+    try {
+      const storedKeluarga = getStoredKeluarga();
+      const storedAnggota = getStoredAnggota();
+      const storedMenu = getStoredMenu();
+
+      if (storedKeluarga?.alias) setUserProfileName(storedKeluarga.alias);
+      if (storedKeluarga?.wilayah) setWilayahName(storedKeluarga.wilayah);
+      if (storedAnggota && storedAnggota.length > 0) {
+        setMembersCount(storedAnggota.length);
+        setMembersList(storedAnggota);
+      }
+      if (storedMenu) {
+        setRencanaMenu(storedMenu);
+        // Buat daftar belanja bahan dari menu aktif
+        if (storedMenu.hari && storedMenu.hari.length > 0) {
+          const rawItems = buatDaftarBelanjaMingguan(storedMenu.hari);
+          const initialItems: ShoppingItem[] = rawItems.slice(0, 8).map((it, idx) => ({
+            id: `item-${idx + 1}`,
+            name: `${it.nama_bahan} (${it.kebutuhan_beli_gram >= 1000 ? `${(it.kebutuhan_beli_gram / 1000).toFixed(1)} kg` : `${it.kebutuhan_beli_gram}g`})`,
+            price: it.estimasi_biaya_rp,
+            checked: idx < 2,
+          }));
+          setShoppingList(initialItems);
+        }
+      }
+    } catch (e) {
+      console.warn('Inisialisasi lokal fallback notice:', e);
+    }
+
+    // 2. Sinkronisasi data real-time dengan Database PostgreSQL
     const checkSecurityStatus = async () => {
       let meta: any = null;
       try {
@@ -105,7 +123,7 @@ export default function DashboardPage() {
         setUserPhone(meta.phone);
       }
 
-      // Fetch data budget dan saldo real-time dari database
+      // Fetch data budget, nama profil keluarga, wilayah, dan anggota dari database
       const fetchBudgetFromDb = async (phoneToUse?: string) => {
         try {
           const query = phoneToUse ? `?phone=${encodeURIComponent(phoneToUse)}` : '';
@@ -113,6 +131,11 @@ export default function DashboardPage() {
           const bData = await res.json();
 
           if (bData.success) {
+            if (bData.alias) setUserProfileName(bData.alias);
+            if (bData.wilayah) setWilayahName(bData.wilayah);
+            if (bData.members_count !== undefined) setMembersCount(bData.members_count);
+            if (bData.members && bData.members.length > 0) setMembersList(bData.members);
+
             setBudgetBelanja(bData.budget_belanja);
             setTipeBudget(bData.tipe_budget || 'bulanan');
             setTotalAnggaran(bData.total_anggaran);
@@ -188,6 +211,45 @@ export default function DashboardPage() {
     checkSecurityStatus();
   }, []);
 
+  // Format pembagian porsi keluarga dari data anggota database
+  const getDynamicPortionString = (porsiList?: any[]) => {
+    if (porsiList && porsiList.length > 0) {
+      return porsiList.map((p) => `${p.alias} (${p.pengali}x porsi)`).join(', ');
+    }
+    if (membersList && membersList.length > 0) {
+      return membersList
+        .map((m) => {
+          const pengali =
+            m.usia_tahun < 4 ? '0.5x' : m.usia_tahun < 10 ? '0.75x' : m.jenis_kelamin === 'L' && m.usia_tahun > 18 ? '1.25x' : '1.0x';
+          return `${m.alias} (${pengali} porsi)`;
+        })
+        .join(', ');
+    }
+    return `${userProfileName}: 1 porsi standar bergizi seimbang.`;
+  };
+
+  // Ambil data hari yang dipilih dari jadwal menu 7 hari
+  const currentDayData: MenuHari | null = useMemo(() => {
+    if (!rencanaMenu || !rencanaMenu.hari) return null;
+    return (
+      rencanaMenu.hari.find((h) => h.hari_ke === selectedDayIndex) ||
+      rencanaMenu.hari[0] ||
+      null
+    );
+  }, [rencanaMenu, selectedDayIndex]);
+
+  // Strip 7 Hari Menu
+  const daysList = useMemo(() => {
+    const dayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    return [1, 2, 3, 4, 5, 6, 7].map((num) => ({
+      hari_ke: num,
+      shortLabel: dayNames[(num - 1) % 7].slice(0, 3),
+      fullLabel: dayNames[(num - 1) % 7],
+      isCurrent: num === selectedDayIndex,
+    }));
+  }, [selectedDayIndex]);
+
+  // Simpan password baru ke database
   const handleSaveSecurityPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
@@ -260,7 +322,7 @@ export default function DashboardPage() {
     );
   };
 
-  // Add item to shopping list
+  // Tambah item belanja cepat
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemText.trim()) return;
@@ -274,18 +336,20 @@ export default function DashboardPage() {
     setNewItemText('');
   };
 
-  // Copy shopping list to WhatsApp format
+  // Salin daftar belanja ke format WhatsApp
   const handleCopyWhatsApp = () => {
     const lines = [
-      '🛒 *Daftar Belanja Porsi Kita*',
-      'Hari: Kamis, 15 Mei 2025',
+      `🛒 *Daftar Belanja Bahan - Porsi Kita*`,
+      `Keluarga: *${userProfileName}*`,
+      `Wilayah / Pasar: ${wilayahName}`,
+      `Hari: ${currentDayData?.label_hari || `Hari ke-${selectedDayIndex}`}`,
       '--------------------------------',
       ...shoppingList.map(
-        (it) => `${it.checked ? '✅' : '⬜'} ${it.name} ${it.price > 0 ? `(Rp ${it.price.toLocaleString('id-ID')})` : ''}`
+        (it) => `${it.checked ? '✅' : '◻️'} ${it.name} ${it.price > 0 ? `(Rp ${it.price.toLocaleString('id-ID')})` : ''}`
       ),
       '--------------------------------',
       `*Total Estimasi: Rp ${shoppingList.reduce((acc, curr) => acc + curr.price, 0).toLocaleString('id-ID')}*`,
-      'Catatan: Beli bahan segar di pasar tradisional.',
+      'Disusun otomatis dengan takaran gizi pas sekeluarga.',
     ];
     const textToCopy = lines.join('\n');
     navigator.clipboard.writeText(textToCopy);
@@ -293,7 +357,7 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedWa(false), 2500);
   };
 
-  // Record expense to database
+  // Catat pengeluaran ke database PostgreSQL
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseInt(expenseAmount.replace(/\D/g, ''), 10);
@@ -328,7 +392,7 @@ export default function DashboardPage() {
     setExpenseNote('');
   };
 
-  // Save updated budget (Bulanan vs Mingguan) to database
+  // Simpan budget belanja (Bulanan vs Mingguan) ke database
   const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault();
     const raw = parseInt(inputBudgetNominal.replace(/\D/g, ''), 10);
@@ -365,7 +429,7 @@ export default function DashboardPage() {
       setPengeluaran(data.pengeluaran);
       setSaldo(data.saldo);
 
-      setBudgetFeedback({ type: 'success', msg: 'Budget belanja berhasil disimpan!' });
+      setBudgetFeedback({ type: 'success', msg: 'Budget belanja berhasil disimpan ke database!' });
 
       setTimeout(() => {
         setShowBudgetModal(false);
@@ -381,29 +445,27 @@ export default function DashboardPage() {
   const totalBelanjaEstimasi = shoppingList.reduce((acc, it) => acc + it.price, 0);
 
   return (
-    <div className="bg-[#fff8f7] font-sans text-[#2c1514] min-h-screen">
+    <div className="bg-[#FAFAFA] font-sans text-[#0D0101] min-h-screen selection:bg-[#6DA003]/30">
       
-      {/* ========================================================= */}
-      {/* 1. ASIDE SIDEBAR (Shared Component)                       */}
-      {/* ========================================================= */}
+      {/* 1. ASIDE SIDEBAR */}
       <Sidebar
         activePath="beranda"
         mobileOpen={mobileSidebarOpen}
         setMobileOpen={setMobileSidebarOpen}
+        anggotaCount={membersCount}
+        rencanaMenuId={rencanaMenu?.id}
       />
 
-      {/* ========================================================= */}
-      {/* 2. TOP HEADER (pl-0 on mobile, lg:pl-64 on desktop) */}
-      {/* ========================================================= */}
+      {/* 2. TOP HEADER */}
       <div className="lg:pl-64">
-        <header className="fixed top-0 left-0 lg:left-64 right-0 h-16 bg-white/90 backdrop-blur-xl border-b border-[#c3c9b2]/30 z-40 flex items-center justify-between px-4 sm:px-8">
+        <header className="fixed top-0 left-0 lg:left-64 right-0 h-16 bg-white/95 backdrop-blur-xl border-b border-stone-200/80 z-40 flex items-center justify-between px-4 sm:px-8 shadow-2xs">
           
           <div className="flex items-center gap-3">
-            {/* Mobile Hamburger Toggle */}
+            {/* Mobile Toggle */}
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
-              className="lg:hidden w-9 h-9 rounded-xl bg-[#fff0ef] flex items-center justify-center text-[#2c1514]"
+              className="lg:hidden w-9 h-9 rounded-xl bg-stone-100 flex items-center justify-center text-stone-700 hover:bg-stone-200 transition cursor-pointer"
               aria-label="Buka Menu"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -411,39 +473,39 @@ export default function DashboardPage() {
               </svg>
             </button>
 
-            <div className="flex items-center gap-2 text-[#737a65]">
-              <span className="w-2 h-2 rounded-full bg-[#6da003]" />
-              <span className="text-[12px] font-semibold tracking-wider uppercase hidden sm:inline">
-                Perencana Domestik Harmonis
+            <div className="flex items-center gap-2 text-stone-600">
+              <span className="w-2 h-2 rounded-full bg-[#6DA003]" />
+              <span className="text-[12px] font-bold tracking-wider uppercase hidden sm:inline text-stone-700">
+                Perencana Gizi &amp; Keuangan Dapur
               </span>
-              <span className="text-[12px] font-semibold text-[#306a3b] sm:hidden">
-                Porsi Kita
+              <span className="text-[12px] font-extrabold text-[#0C4B20] sm:hidden tracking-tight">
+                PORSI KITA
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Notification Bell */}
+            {/* Notifikasi Ringkasan */}
             <button
               type="button"
-              onClick={() => alert('Notifikasi: Menu Kamis telah siap dan anggaran belanja terkunci aman.')}
-              className="w-9 h-9 rounded-full bg-[#fff0ef] flex items-center justify-center text-[#434937] hover:text-[#2c1514] transition-colors relative"
-              title="Notifikasi"
+              onClick={() => alert(`Notifikasi: Menu untuk ${userProfileName} telah siap dan anggaran belanja terkunci aman.`)}
+              className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 hover:text-stone-900 transition relative cursor-pointer"
+              title="Notifikasi Menu & Anggaran"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#6da003]" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#6DA003]" />
             </button>
 
-            {/* Profile Avatar with Warning Badge */}
+            {/* Avatar Profil dengan Indikator Keamanan */}
             <div className="relative">
               <Link
                 href="/keluarga"
-                className="w-8 h-8 rounded-full bg-[#466800] text-white flex items-center justify-center font-bold text-xs shadow-xs"
+                className="w-8 h-8 rounded-full bg-[#0C4B20] text-white flex items-center justify-center font-bold text-xs shadow-xs hover:brightness-110 transition cursor-pointer"
                 title={`Profil: ${userProfileName}`}
               >
-                {userProfileName ? userProfileName.charAt(0).toUpperCase() : 'S'}
+                {userProfileName ? userProfileName.charAt(0).toUpperCase() : 'K'}
               </Link>
               {hasWarningBadge && (
                 <button
@@ -457,77 +519,77 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* ========================================================= */}
         {/* 3. MAIN DASHBOARD CONTENT */}
-        {/* ========================================================= */}
-        <main className="relative pt-20 min-h-screen w-full px-4 sm:px-8 pb-12 bg-[#fff8f7]">
-          <div className="flex flex-col w-full max-w-[1280px] mx-auto">
+        <main className="relative pt-20 min-h-screen w-full px-4 sm:px-8 pb-14 bg-[#FAFAFA]">
+          <div className="flex flex-col w-full max-w-[1280px] mx-auto gap-6">
             
             {/* A. GREETING & CONTEXT HEADER */}
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-stone-200/60">
               <div className="flex flex-col">
-                <h1 className="text-[28px] sm:text-[32px] font-bold text-[#2c1514] tracking-tight">
-                  Halo Ibu Samantha,
+                <div className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#6DA003] uppercase tracking-wider mb-1">
+                  <span className="w-2 h-2 rounded-full bg-[#6DA003]" />
+                  <span>Ringkasan Harian Keluarga</span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0D0101] tracking-tight">
+                  Halo, {userProfileName}!
                 </h1>
-                <p className="text-[14px] sm:text-[15px] text-[#5e5e5f] mt-1">
-                  Berikut ringkasan menu dan keuangan keluarga bulan ini.
+                <p className="text-[14px] text-stone-600 mt-1">
+                  Berikut rencana menu bergizi dan estimasi pengeluaran dapur keluarga Anda.
                 </p>
               </div>
 
-              {/* Profile Card Context */}
-              <div className="flex items-center gap-3 p-2.5 pl-4 rounded-2xl bg-white shadow-xs border border-stone-200/50 self-start md:self-auto">
+              {/* Profile Card Context dari Database */}
+              <div className="flex items-center gap-3 p-3 pl-4 rounded-2xl bg-white shadow-xs border border-stone-200 self-start md:self-auto">
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-2">
-                    <span className="text-[14px] font-semibold text-[#2c1514]">Ibu Samantha</span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#b2f2b6] text-[#002109] text-[11px] font-bold">
-                      Anggaran Aman
+                    <span className="text-[14px] font-bold text-[#0D0101]">{userProfileName}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#B2F2B6] text-[#002109] text-[11px] font-bold">
+                      Anggaran Terkendali
                     </span>
                   </div>
-                  <span className="text-[12px] text-[#5e5e5f]">Keluarga (4 Anggota) • Jakarta Selatan</span>
+                  <span className="text-[12px] text-stone-500 font-medium">
+                    {membersCount > 0 ? `${membersCount} Anggota Keluarga` : 'Keluarga'} • {wilayahName}
+                  </span>
                 </div>
-                <div className="w-11 h-11 rounded-full overflow-hidden bg-stone-200 border border-stone-200 shrink-0">
-                  <img
-                    className="w-full h-full object-cover"
-                    alt="Portrait of an Indonesian mother with gentle warm smile"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKN23XQm6XRUBWILfAo8i4kw3QAIyEUzEdyQs2RqI6kOYE6tYFyVETKYtwfKEQlugDfFpdDQyKv2F4NcureV9cURVRGoXFI7N9kIvVubOiKG2-dq9isgxK3PQc8Qe87HTWfUWJqosmxVTXsrBj9xWMtSR4xkuxioUt-5g5aq4puTNmBL4ngfkx_zfWBoiAxdiqrp_tD-QfPy5VIx4F7F56wQWEw619NAdqXJNt3cqnHAGDCgI-Q7ik"
-                  />
+                <div className="w-10 h-10 rounded-full bg-[#0C4B20] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                  {userProfileName ? userProfileName.charAt(0).toUpperCase() : 'K'}
                 </div>
               </div>
             </header>
 
-            {/* B. MAIN 2-COLUMN GRID (Left: Finance + Meals, Right: Shopping List) */}
+            {/* B. MAIN 2-COLUMN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               
-              {/* LEFT COLUMN (lg:col-span-8) */}
+              {/* LEFT COLUMN: Dompet & Kalender Masak (8 Kolom) */}
               <div className="lg:col-span-8 flex flex-col gap-8">
                 
                 {/* C. DOMPET BULANAN & KEUANGAN (Solid Deep Green #0C4B20) */}
                 <section
                   id="dompet"
-                  className="rounded-3xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden"
+                  className="rounded-3xl p-6 sm:p-8 text-white shadow-sm relative overflow-hidden"
                   style={{ backgroundColor: '#0C4B20' }}
                 >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                     <div className="flex flex-col">
-                      <div className="flex items-center gap-2 mb-2 text-[#b2f2b6]">
+                      <div className="flex items-center gap-2 mb-2 text-[#B2F2B6]">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                         </svg>
-                        <span className="text-[12px] font-bold uppercase tracking-wider">
+                        <span className="text-[12px] font-extrabold uppercase tracking-wider">
                           Sisa Saldo Belanja Dapur
                         </span>
                       </div>
 
                       <div className="flex items-baseline gap-2">
-                        <span className="text-[34px] sm:text-[44px] font-bold tracking-tight text-white tabular-nums leading-none">
+                        <span className="text-[34px] sm:text-[44px] font-extrabold tracking-tight text-white tabular-nums leading-none">
                           Rp {saldo.toLocaleString('id-ID')}
                         </span>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        <p className="text-[13px] opacity-80">
-                          dari total anggaran <strong className="text-white">Rp {totalAnggaran.toLocaleString('id-ID')}</strong>
+                      <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                        <p className="text-[13px] opacity-85">
+                          dari total anggaran <strong className="text-white font-bold">Rp {totalAnggaran.toLocaleString('id-ID')}</strong>
                         </p>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#b2f2b6]/20 text-[#b2f2b6] border border-[#b2f2b6]/30">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#B2F2B6]/20 text-[#B2F2B6] border border-[#B2F2B6]/30">
                           {tipeBudget === 'mingguan'
                             ? `Budget Mingguan (Rp ${budgetBelanja.toLocaleString('id-ID')} × 4)`
                             : 'Budget Bulanan'}
@@ -535,20 +597,20 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Ringkasan Alokasi */}
-                      <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/10">
+                      <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/15">
                         <div className="flex flex-col">
-                          <span className="text-[11px] opacity-75">Jatah Belanja Bulanan (+)</span>
-                          <span className="text-[18px] sm:text-[20px] text-[#b2f2b6] font-semibold tabular-nums">
+                          <span className="text-[11px] opacity-75">Total Anggaran Bulanan (+)</span>
+                          <span className="text-[18px] sm:text-[20px] text-[#B2F2B6] font-bold tabular-nums">
                             Rp {totalAnggaran.toLocaleString('id-ID')}
                           </span>
-                          <span className="text-[11px] text-[#b2f2b6]/90 mt-0.5">Alokasi Dapur Bersih</span>
+                          <span className="text-[11px] text-[#B2F2B6]/90 mt-0.5 font-medium">Batas Belanja Dapur</span>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[11px] opacity-75">Pengeluaran Terpakai (-)</span>
-                          <span className="text-[18px] sm:text-[20px] font-semibold text-white tabular-nums">
+                          <span className="text-[18px] sm:text-[20px] font-bold text-white tabular-nums">
                             Rp {pengeluaran.toLocaleString('id-ID')}
                           </span>
-                          <span className="text-[11px] text-[#b2f2b6]/90 mt-0.5">
+                          <span className="text-[11px] text-[#B2F2B6]/90 mt-0.5 font-medium">
                             {totalAnggaran > 0 ? Math.round((pengeluaran / totalAnggaran) * 100) : 0}% terpakai
                           </span>
                         </div>
@@ -561,9 +623,9 @@ export default function DashboardPage() {
                         type="button"
                         onClick={() => setShowExpenseModal(true)}
                         style={{ backgroundColor: '#6DA003' }}
-                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-white font-semibold text-[14px] shadow-sm transition-all hover:brightness-105 active:scale-95 cursor-pointer"
+                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-white font-bold text-[13px] shadow-sm transition-all hover:brightness-105 active:scale-95 cursor-pointer min-h-[44px]"
                       >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span>Catat Pengeluaran</span>
@@ -577,9 +639,9 @@ export default function DashboardPage() {
                           setBudgetFeedback({ type: '', msg: '' });
                           setShowBudgetModal(true);
                         }}
-                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all font-semibold text-[14px] backdrop-blur-sm cursor-pointer border border-white/10"
+                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all font-bold text-[13px] backdrop-blur-sm cursor-pointer border border-white/15 min-h-[44px]"
                       >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                         <span>Atur Budget Belanja</span>
@@ -592,45 +654,42 @@ export default function DashboardPage() {
                 <section className="flex flex-col gap-4">
                   {/* Section Header */}
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-[20px] font-bold text-[#2c1514]">Jadwal Masak Keluarga</h2>
-                      <span className="px-2.5 py-1 rounded-full bg-[#ffe9e7] text-[#434937] text-[11px] font-semibold">
-                        Kamis, 15 Mei 2025 (Hari Ini)
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="text-[20px] font-extrabold text-[#0D0101]">Jadwal Masak Keluarga</h2>
+                      <span className="px-2.5 py-1 rounded-full bg-[#EAF5D8] text-[#0C4B20] text-[11px] font-bold border border-[#6DA003]/30">
+                        {currentDayData?.label_hari || `Hari ke-${selectedDayIndex}`}
                       </span>
                     </div>
 
                     <Link
                       href="/menu"
-                      className="flex items-center gap-1.5 text-[14px] font-semibold text-[#306a3b] hover:text-[#466800] transition-colors"
+                      className="flex items-center gap-1.5 text-[13px] font-bold text-[#0C4B20] hover:text-[#6DA003] transition-colors"
                     >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span>Ganti Menu Harian</span>
+                      <span>Lihat Rincian Menu 7 Hari →</span>
                     </Link>
                   </div>
 
-                  {/* Weekly Pill Strip */}
+                  {/* 7-Day Pill Strip */}
                   <div className="flex items-center gap-2 overflow-x-auto pb-1" id="calendar-strip">
-                    {DAYS_OF_WEEK.map((item) => {
-                      const isSelected = selectedDay === item.date;
+                    {daysList.map((item) => {
+                      const isSelected = selectedDayIndex === item.hari_ke;
                       return (
                         <button
-                          key={item.date}
+                          key={item.hari_ke}
                           type="button"
-                          onClick={() => setSelectedDay(item.date)}
+                          onClick={() => setSelectedDayIndex(item.hari_ke)}
                           style={{ backgroundColor: isSelected ? '#0C4B20' : undefined }}
-                          className={`flex-1 min-w-[64px] py-2.5 px-2 rounded-2xl flex flex-col items-center transition-all ${
+                          className={`flex-1 min-w-[64px] py-2.5 px-2 rounded-2xl flex flex-col items-center transition-all cursor-pointer ${
                             isSelected
-                              ? 'text-white shadow-sm relative'
-                              : 'bg-white text-[#2c1514] hover:bg-[#ffe9e7] border border-stone-200/50'
+                              ? 'text-white shadow-xs relative'
+                              : 'bg-white text-[#0D0101] hover:bg-stone-50 border border-stone-200'
                           }`}
                         >
-                          <span className={`text-[11px] font-medium ${isSelected ? 'text-[#b2f2b6]' : 'text-[#5e5e5f]'}`}>
-                            {item.day}
+                          <span className={`text-[11px] font-bold ${isSelected ? 'text-[#B2F2B6]' : 'text-stone-500'}`}>
+                            {item.shortLabel}
                           </span>
-                          <span className={`text-[18px] mt-0.5 ${isSelected ? 'font-bold' : 'font-semibold'}`}>
-                            {item.date}
+                          <span className={`text-[16px] mt-0.5 ${isSelected ? 'font-extrabold' : 'font-semibold'}`}>
+                            H-{item.hari_ke}
                           </span>
                           {isSelected && (
                             <span className="w-1.5 h-1.5 rounded-full mt-1 bg-[#6DA003]" />
@@ -644,180 +703,215 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                     
                     {/* Card Pagi */}
-                    <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/60">
-                      <div className="h-36 w-full relative">
-                        <img
-                          className="w-full h-full object-cover"
-                          alt="Sayur bening bayam jagung manis dan bakwan"
-                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUJtdRGWzTdRnP6dXASiXmkL47HEZzdGwgzTuBW4OAUsnP4CksPpD7YHf5zQxHdVyj1P7CYY-qzLXqK767z4s9jGHCmjHu-w0YRQU6p3CpW9cmV3wInMrmI8K7AuzBjGJd69si1a7Wnuz1AdJ6GVhn72D4fdVawRWiz81BCNv4R10HHnUbt4kVfGSFpJNFcxUn0NWqDHfODD1Y1smwblkJRmGV2e779UvfrAUbCFjv6OA4Yb4M4os-"
-                        />
-                        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#2c1514] text-[11px] font-semibold shadow-2xs">
-                          <span className="w-2 h-2 rounded-full bg-[#466800]" />
-                          <span>PAGI • 06:30</span>
-                        </div>
-                      </div>
+                    {(() => {
+                      const pagiSesi = currentDayData?.sesi_makan?.pagi;
+                      const pagiRecipe = pagiSesi?.hidangan?.[0]?.nama || 'Sayur Bening Bayam & Telur';
+                      const pagiCostNum =
+                        (pagiSesi as unknown as { estimasi_biaya_rp?: number })?.estimasi_biaya_rp ||
+                        pagiSesi?.hidangan?.reduce((acc, h) => acc + (h.biaya_per_porsi_rp || 0), 0) ||
+                        16000;
+                      const pagiCost = `Rp ${pagiCostNum.toLocaleString('id-ID')}`;
+                      const pagiPortion = getDynamicPortionString(pagiSesi?.porsi_per_anggota);
 
-                      <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                        <div className="flex flex-col gap-1.5">
-                          <h3 className="font-bold text-[15px] text-[#2c1514] leading-snug">
-                            Sayur Bening Bayam &amp; Bakwan Jagung
-                          </h3>
-                          <span className="text-[12px] text-[#306a3b] font-medium">
-                            Est. Biaya: Rp 16.000 (4 Porsi)
-                          </span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            <span className="px-2 py-0.5 rounded-md bg-[#ffe9e7] text-[#434937] text-[10px] font-medium">
-                              Tinggi Zat Besi
-                            </span>
-                            <span className="px-2 py-0.5 rounded-md bg-[#ffe9e7] text-[#434937] text-[10px] font-medium">
-                              Balita &gt;2 Thn
-                            </span>
+                      return (
+                        <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200">
+                          <div className="h-36 w-full relative bg-stone-100">
+                            <img
+                              className="w-full h-full object-cover"
+                              alt="Sarapan Pagi"
+                              src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80"
+                            />
+                            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
+                              <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
+                              <span>SARAPAN • 06:30</span>
+                            </div>
                           </div>
-                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedRecipe({
-                              title: 'Sayur Bening Bayam & Bakwan Jagung',
-                              session: 'PAGI • 06:30',
-                              cost: 'Rp 16.000 (4 Porsi)',
-                              tags: ['Tinggi Zat Besi (Fe 14mg)', 'Kalsium Ca 320mg', 'Balita >2 th'],
-                              portionDetail:
-                                'Ayu (0.5 porsi - 1 mangkuk kecil), Rian (0.75 porsi), Samantha (1 porsi), Suami (1.25 porsi).',
-                            })
-                          }
-                          className="w-full mt-2 py-2 px-3 rounded-xl bg-[#fff0ef] text-[#2c1514] hover:bg-[#ffe9e7] text-[12px] font-semibold transition-colors flex items-center justify-center gap-1"
-                        >
-                          <span>Lihat Resep &amp; Porsi</span>
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </article>
+                          <div className="p-4 flex flex-col flex-1 justify-between gap-3">
+                            <div className="flex flex-col gap-1.5">
+                              <h3 className="font-bold text-[15px] text-[#0D0101] leading-snug">
+                                {pagiRecipe}
+                              </h3>
+                              <span className="text-[12px] text-[#0C4B20] font-bold">
+                                Est. Biaya: {pagiCost}
+                              </span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
+                                  Tinggi Zat Besi
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
+                                  Energi Seimbang
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedRecipe({
+                                  title: pagiRecipe,
+                                  session: 'SARAPAN • 06:30',
+                                  cost: pagiCost,
+                                  tags: ['Tinggi Zat Besi (Fe)', 'Kalsium Seimbang', 'Serat Pagi'],
+                                  portionDetail: pagiPortion,
+                                })
+                              }
+                              className="w-full mt-2 py-2 px-3 rounded-xl bg-stone-50 hover:bg-stone-100 text-[#0D0101] text-[12px] font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
+                            >
+                              <span>Lihat Resep &amp; Porsi</span>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })()}
 
                     {/* Card Siang */}
-                    <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/60">
-                      <div className="h-36 w-full relative">
-                        <img
-                          className="w-full h-full object-cover"
-                          alt="Ayam ungkep bumbu kuning tempe bacem"
-                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsFwc-l2HZk092NWOjl7oCe776OquOwcGLgu4MjInBZXQVR3Vdvq57Ishje5If2XKFwzgeXLGGoW5HGKsuRDuIbA7nZ7mI69EhseICZ41yiITP94je1kZxBsslvU1zodo1niOdO3ajIuxxq22rZYnjJ5j7gYV5JsHwlKQBySY08qWCQBOh453Ec_BMRm6ddI5aY4QvRYf4Bf8sLaH5vm6qquMYKz2yf-wc1cPekjgKjhBBksCJLTSP"
-                        />
-                        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#2c1514] text-[11px] font-semibold shadow-2xs">
-                          <span className="w-2 h-2 rounded-full bg-[#85B620]" />
-                          <span>SIANG • 12:30</span>
-                        </div>
-                      </div>
+                    {(() => {
+                      const siangSesi = currentDayData?.sesi_makan?.siang;
+                      const siangRecipe = siangSesi?.hidangan?.[0]?.nama || 'Ayam Ungkep Kuning & Tempe';
+                      const siangCostNum =
+                        (siangSesi as unknown as { estimasi_biaya_rp?: number })?.estimasi_biaya_rp ||
+                        siangSesi?.hidangan?.reduce((acc, h) => acc + (h.biaya_per_porsi_rp || 0), 0) ||
+                        32000;
+                      const siangCost = `Rp ${siangCostNum.toLocaleString('id-ID')}`;
+                      const siangPortion = getDynamicPortionString(siangSesi?.porsi_per_anggota);
 
-                      <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                        <div className="flex flex-col gap-1.5">
-                          <h3 className="font-bold text-[15px] text-[#2c1514] leading-snug">
-                            Ayam Ungkep Kuning &amp; Tempe Bacem
-                          </h3>
-                          <span className="text-[12px] text-[#306a3b] font-medium">
-                            Est. Biaya: Rp 32.000 (4 Porsi)
-                          </span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            <span className="px-2 py-0.5 rounded-md bg-[#ffe9e7] text-[#434937] text-[10px] font-medium">
-                              Protein 28g
-                            </span>
-                            <span className="px-2 py-0.5 rounded-md bg-[#ffe9e7] text-[#434937] text-[10px] font-medium">
-                              Rendah Garam
-                            </span>
+                      return (
+                        <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200">
+                          <div className="h-36 w-full relative bg-stone-100">
+                            <img
+                              className="w-full h-full object-cover"
+                              alt="Makan Siang"
+                              src="https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=500&auto=format&fit=crop&q=80"
+                            />
+                            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
+                              <span className="w-2 h-2 rounded-full bg-[#6DA003]" />
+                              <span>MAKAN SIANG • 12:30</span>
+                            </div>
                           </div>
-                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedRecipe({
-                              title: 'Ayam Ungkep Kuning & Tempe Bacem',
-                              session: 'SIANG • 12:30',
-                              cost: 'Rp 32.000 (4 Porsi)',
-                              tags: ['Protein Hewani & Nabati', 'Rendah Garam', 'Asam Folat'],
-                              portionDetail:
-                                'Ayu (1/2 potong dada ayam + 1 tempe), Rian (1 potong paha), Samantha (1 potong), Suami (1.5 potong).',
-                            })
-                          }
-                          className="w-full mt-2 py-2 px-3 rounded-xl bg-[#fff0ef] text-[#2c1514] hover:bg-[#ffe9e7] text-[12px] font-semibold transition-colors flex items-center justify-center gap-1"
-                        >
-                          <span>Lihat Resep &amp; Porsi</span>
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </article>
+                          <div className="p-4 flex flex-col flex-1 justify-between gap-3">
+                            <div className="flex flex-col gap-1.5">
+                              <h3 className="font-bold text-[15px] text-[#0D0101] leading-snug">
+                                {siangRecipe}
+                              </h3>
+                              <span className="text-[12px] text-[#0C4B20] font-bold">
+                                Est. Biaya: {siangCost}
+                              </span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
+                                  Protein Hewani &amp; Nabati
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
+                                  Zat Besi Heme
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedRecipe({
+                                  title: siangRecipe,
+                                  session: 'MAKAN SIANG • 12:30',
+                                  cost: siangCost,
+                                  tags: ['Protein Tinggi', 'Asam Folat', 'Zinc'],
+                                  portionDetail: siangPortion,
+                                })
+                              }
+                              className="w-full mt-2 py-2 px-3 rounded-xl bg-stone-50 hover:bg-stone-100 text-[#0D0101] text-[12px] font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
+                            >
+                              <span>Lihat Resep &amp; Porsi</span>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })()}
 
                     {/* Card Malam */}
-                    <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/60">
-                      <div className="h-36 w-full relative">
-                        <img
-                          className="w-full h-full object-cover"
-                          alt="Sup tahu sutra dan tumis buncis"
-                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuCO4l3y2VL8uULay7sf6JsVkBq_4wvi-Zl6y2mP3LbnV7_b68MIe3Co0URwiRj-ooifXqnHlnJhj1fCQPyfIddKNmNSnsBDQRRBKkj0pguYSHNZEmcajsnBK2EyjVzk83_sSdDbJ9a3mPX9YMDUP8lK8JfagE1PU03j_Wa187r-2ouSKsfo8vsBZ-IZYRfUwV5N0gnoxAoE5DXy9IdTvBvmLSKgh1ez2j_i0zfGl2-yOqLphpKt4WDD"
-                        />
-                        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#2c1514] text-[11px] font-semibold shadow-2xs">
-                          <span className="w-2 h-2 rounded-full bg-[#306a3b]" />
-                          <span>MALAM • 18:30</span>
-                        </div>
-                      </div>
+                    {(() => {
+                      const malamSesi = currentDayData?.sesi_makan?.malam;
+                      const malamRecipe = malamSesi?.hidangan?.[0]?.nama || 'Sup Tahu Sutra & Tumis Sayur';
+                      const malamCostNum =
+                        (malamSesi as unknown as { estimasi_biaya_rp?: number })?.estimasi_biaya_rp ||
+                        malamSesi?.hidangan?.reduce((acc, h) => acc + (h.biaya_per_porsi_rp || 0), 0) ||
+                        22000;
+                      const malamCost = `Rp ${malamCostNum.toLocaleString('id-ID')}`;
+                      const malamPortion = getDynamicPortionString(malamSesi?.porsi_per_anggota);
 
-                      <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                        <div className="flex flex-col gap-1.5">
-                          <h3 className="font-bold text-[15px] text-[#2c1514] leading-snug">
-                            Sup Tahu Sutra &amp; Tumis Buncis
-                          </h3>
-                          <span className="text-[12px] text-[#306a3b] font-medium">
-                            Est. Biaya: Rp 22.000 (4 Porsi)
-                          </span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            <span className="px-2 py-0.5 rounded-md bg-[#ffe9e7] text-[#434937] text-[10px] font-medium">
-                              Mudah Dicerna
-                            </span>
-                            <span className="px-2 py-0.5 rounded-md bg-[#ffe9e7] text-[#434937] text-[10px] font-medium">
-                              Kalsium Lansia
-                            </span>
+                      return (
+                        <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200">
+                          <div className="h-36 w-full relative bg-stone-100">
+                            <img
+                              className="w-full h-full object-cover"
+                              alt="Makan Malam"
+                              src="https://images.unsplash.com/photo-1547592180-85f173990554?w=500&auto=format&fit=crop&q=80"
+                            />
+                            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
+                              <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
+                              <span>MAKAN MALAM • 18:30</span>
+                            </div>
                           </div>
-                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedRecipe({
-                              title: 'Sup Tahu Sutra & Tumis Buncis',
-                              session: 'MALAM • 18:30',
-                              cost: 'Rp 22.000 (4 Porsi)',
-                              tags: ['Tinggi Kalsium Ca', 'Serat Lembut', 'Tekstur Ramah Anak'],
-                              portionDetail:
-                                'Porsi kuah hangat seimbang untuk santap malam sekeluarga dengan nasi pulen.',
-                            })
-                          }
-                          className="w-full mt-2 py-2 px-3 rounded-xl bg-[#fff0ef] text-[#2c1514] hover:bg-[#ffe9e7] text-[12px] font-semibold transition-colors flex items-center justify-center gap-1"
-                        >
-                          <span>Lihat Resep &amp; Porsi</span>
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </article>
+                          <div className="p-4 flex flex-col flex-1 justify-between gap-3">
+                            <div className="flex flex-col gap-1.5">
+                              <h3 className="font-bold text-[15px] text-[#0D0101] leading-snug">
+                                {malamRecipe}
+                              </h3>
+                              <span className="text-[12px] text-[#0C4B20] font-bold">
+                                Est. Biaya: {malamCost}
+                              </span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
+                                  Mudah Dicerna
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
+                                  Kalsium Tulang
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedRecipe({
+                                  title: malamRecipe,
+                                  session: 'MAKAN MALAM • 18:30',
+                                  cost: malamCost,
+                                  tags: ['Kalsium Ca', 'Serat Halus', 'Ramah Pencernaan'],
+                                  portionDetail: malamPortion,
+                                })
+                              }
+                              className="w-full mt-2 py-2 px-3 rounded-xl bg-stone-50 hover:bg-stone-100 text-[#0D0101] text-[12px] font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
+                            >
+                              <span>Lihat Resep &amp; Porsi</span>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })()}
 
                   </div>
                 </section>
 
               </div>
 
-              {/* RIGHT COLUMN: WIDGET DAFTAR BELANJA PASAR (lg:col-span-4) */}
+              {/* RIGHT COLUMN: WIDGET DAFTAR BELANJA PASAR (4 Kolom) */}
               <aside
                 id="shopping-list-section"
-                className="lg:col-span-4 flex flex-col gap-4 rounded-3xl p-6 shadow-xs border border-stone-300/60"
-                style={{ backgroundColor: '#E2E0E1' }}
+                className="lg:col-span-4 flex flex-col gap-4 rounded-3xl p-6 shadow-xs border border-stone-200 bg-white"
               >
                 {/* Header Widget */}
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between pb-2 border-b border-stone-100">
                   <div className="flex items-center gap-3">
                     <div
                       className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-2xs"
@@ -828,16 +922,16 @@ export default function DashboardPage() {
                       </svg>
                     </div>
                     <div className="flex flex-col">
-                      <h2 className="text-[18px] font-bold text-[#2c1514] leading-tight">Harus Dibeli</h2>
-                      <span className="text-[12px] text-[#5e5e5f]">Pasar Tradisional • 15 - 18 Mei</span>
+                      <h2 className="text-[17px] font-extrabold text-[#0D0101] leading-tight">Harus Dibeli</h2>
+                      <span className="text-[12px] text-stone-500 font-medium">{wilayahName}</span>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <span className="text-[10px] text-[#5e5e5f] uppercase tracking-wider block font-semibold">
+                    <span className="text-[10px] text-stone-500 uppercase tracking-wider block font-bold">
                       Estimasi
                     </span>
-                    <span className="text-[15px] font-bold text-[#2c1514] tabular-nums">
+                    <span className="text-[15px] font-extrabold text-[#0C4B20] tabular-nums">
                       Rp {totalBelanjaEstimasi.toLocaleString('id-ID')}
                     </span>
                   </div>
@@ -848,20 +942,20 @@ export default function DashboardPage() {
                   {shoppingList.map((item) => (
                     <label
                       key={item.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-white/85 hover:bg-white cursor-pointer transition-all shadow-2xs group"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50/80 hover:bg-stone-100 cursor-pointer transition-all border border-stone-200/60"
                     >
                       <div className="flex items-center gap-2.5">
                         <input
                           type="checkbox"
                           checked={item.checked}
                           onChange={() => handleToggleCheck(item.id)}
-                          className="w-4 h-4 rounded text-[#306a3b] focus:ring-0 accent-[#6DA003] cursor-pointer"
+                          className="w-4 h-4 rounded text-[#0C4B20] focus:ring-0 accent-[#6DA003] cursor-pointer"
                         />
                         <span
                           className={`text-[13px] transition-colors ${
                             item.checked
-                              ? 'line-through text-[#5e5e5f]'
-                              : 'text-[#2c1514] font-medium'
+                              ? 'line-through text-stone-400'
+                              : 'text-[#0D0101] font-semibold'
                           }`}
                         >
                           {item.name}
@@ -870,7 +964,7 @@ export default function DashboardPage() {
                       {item.price > 0 && (
                         <span
                           className={`text-[11px] tabular-nums ${
-                            item.checked ? 'text-[#5e5e5f]' : 'text-[#434937] font-semibold'
+                            item.checked ? 'text-stone-400 line-through' : 'text-[#0C4B20] font-bold'
                           }`}
                         >
                           Rp {item.price.toLocaleString('id-ID')}
@@ -883,9 +977,9 @@ export default function DashboardPage() {
                 {/* Quick Add Input Form */}
                 <form
                   onSubmit={handleAddItem}
-                  className="flex items-center gap-2 bg-white rounded-xl px-3 py-1.5 shadow-2xs border border-stone-200/60"
+                  className="flex items-center gap-2 bg-stone-50 rounded-xl px-3 py-1.5 border border-stone-200"
                 >
-                  <svg className="w-4 h-4 text-[#5e5e5f]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                   </svg>
                   <input
@@ -893,43 +987,47 @@ export default function DashboardPage() {
                     value={newItemText}
                     onChange={(e) => setNewItemText(e.target.value)}
                     placeholder="Tambah catatan bahan..."
-                    className="w-full bg-transparent py-1.5 text-[13px] outline-none text-[#2c1514] placeholder:text-[#5e5e5f]"
+                    className="w-full bg-transparent py-1.5 text-[13px] outline-none text-[#0D0101] placeholder:text-stone-400 font-medium"
                   />
                   <button
                     type="submit"
-                    className="text-[12px] text-[#306a3b] font-bold hover:text-[#466800] px-2 py-1"
+                    className="text-[12px] text-[#0C4B20] font-bold hover:text-[#6DA003] px-2 py-1 cursor-pointer"
                   >
                     Simpan
                   </button>
                 </form>
 
-                {/* Action Button: WhatsApp */}
-                <div className="flex flex-col gap-1.5 mt-1">
+                {/* Action Buttons: WhatsApp & Lihat Daftar Belanja Lengkap */}
+                <div className="flex flex-col gap-2 mt-1">
                   <button
                     type="button"
                     onClick={handleCopyWhatsApp}
                     style={{ backgroundColor: '#6DA003' }}
-                    className="w-full py-3.5 px-4 rounded-2xl text-white font-bold text-[14px] flex items-center justify-center gap-2 shadow-sm transition-all hover:brightness-105 active:scale-98"
+                    className="w-full py-3 px-4 rounded-xl text-white font-bold text-[13px] flex items-center justify-center gap-2 shadow-sm transition hover:brightness-105 active:scale-98 cursor-pointer min-h-[44px]"
                   >
                     {copiedWa ? (
                       <>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                         <span>Daftar Disalin ke Clipboard!</span>
                       </>
                     ) : (
                       <>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
-                        <span>Salin ke WhatsApp</span>
+                        <span>Salin Format WhatsApp</span>
                       </>
                     )}
                   </button>
-                  <span className="text-[11px] text-[#5e5e5f] text-center leading-tight">
-                    Format teks rapi siap kirim ke suami / pedagang sayur langganan
-                  </span>
+
+                  <Link
+                    href="/belanja"
+                    className="w-full py-2.5 px-4 rounded-xl bg-stone-100 hover:bg-stone-200 text-[#0C4B20] text-center font-bold text-xs transition cursor-pointer"
+                  >
+                    Buka Checklist Pasar Lengkap (Lapak &amp; Kulkas) →
+                  </Link>
                 </div>
               </aside>
 
@@ -939,39 +1037,37 @@ export default function DashboardPage() {
         </main>
       </div>
 
-      {/* ========================================================= */}
       {/* 4. MODAL DETAIL RESEP & PORSI */}
-      {/* ========================================================= */}
       {selectedRecipe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-stone-200">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
               <div>
-                <span className="text-[11px] font-bold text-[#6DA003] uppercase tracking-wider block">
+                <span className="text-[11px] font-extrabold text-[#6DA003] uppercase tracking-wider block">
                   {selectedRecipe.session}
                 </span>
-                <h3 className="text-[20px] font-bold text-[#2c1514]">{selectedRecipe.title}</h3>
+                <h3 className="text-[20px] font-extrabold text-[#0D0101]">{selectedRecipe.title}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedRecipe(null)}
-                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800"
+                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <div className="py-4 space-y-4 text-sm">
-              <div className="p-3 bg-[#fff0ef] rounded-2xl">
-                <span className="text-[11px] text-[#737a65] block font-semibold">Estimasi Biaya:</span>
-                <span className="text-[16px] font-bold text-[#2c1514]">{selectedRecipe.cost}</span>
+              <div className="p-3.5 bg-[#F2F9EC] rounded-2xl border border-[#6DA003]/20">
+                <span className="text-[11px] text-[#0C4B20] block font-bold">Estimasi Biaya:</span>
+                <span className="text-[16px] font-extrabold text-[#0C4B20]">{selectedRecipe.cost}</span>
               </div>
 
               <div>
-                <span className="font-bold text-[#2c1514] block mb-1">Nilai Gizi Unggulan:</span>
+                <span className="font-bold text-[#0D0101] block mb-1.5">Nilai Gizi Unggulan:</span>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedRecipe.tags.map((t) => (
-                    <span key={t} className="px-2.5 py-1 rounded-lg bg-[#b2f2b6] text-[#002109] text-xs font-semibold">
+                    <span key={t} className="px-2.5 py-1 rounded-lg bg-[#B2F2B6] text-[#002109] text-xs font-bold">
                       {t}
                     </span>
                   ))}
@@ -979,8 +1075,8 @@ export default function DashboardPage() {
               </div>
 
               <div>
-                <span className="font-bold text-[#2c1514] block mb-1">Pembagian Piring Keluarga:</span>
-                <p className="text-stone-600 leading-relaxed text-xs sm:text-sm bg-stone-50 p-3 rounded-xl border border-stone-200/60">
+                <span className="font-bold text-[#0D0101] block mb-1.5">Pembagian Porsi Keluarga ({userProfileName}):</span>
+                <p className="text-stone-700 leading-relaxed text-xs sm:text-sm bg-stone-50 p-3.5 rounded-xl border border-stone-200">
                   {selectedRecipe.portionDetail}
                 </p>
               </div>
@@ -990,7 +1086,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setSelectedRecipe(null)}
-                className="px-5 py-2.5 rounded-xl bg-[#0C4B20] text-white font-semibold text-xs hover:bg-[#143118] transition"
+                className="px-5 py-2.5 rounded-xl bg-[#0C4B20] text-white font-bold text-xs hover:brightness-110 transition cursor-pointer shadow-sm"
               >
                 Tutup Rincian
               </button>
@@ -999,18 +1095,16 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
       {/* 5. MODAL CATAT PENGELUARAN */}
-      {/* ========================================================= */}
       {showExpenseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-              <h3 className="text-[18px] font-bold text-[#2c1514]">Catat Pengeluaran Belanja</h3>
+              <h3 className="text-[18px] font-extrabold text-[#0D0101]">Catat Pengeluaran Belanja</h3>
               <button
                 type="button"
                 onClick={() => setShowExpenseModal(false)}
-                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800"
+                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
               >
                 ✕
               </button>
@@ -1025,32 +1119,35 @@ export default function DashboardPage() {
                   value={expenseAmount}
                   onChange={(e) => setExpenseAmount(e.target.value)}
                   placeholder="Contoh: 35000"
-                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#6DA003]"
+                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">Catatan / Warung</label>
+                <label className="text-xs font-bold text-stone-700 block mb-1">Catatan / Warung Pasar</label>
                 <input
                   type="text"
                   value={expenseNote}
                   onChange={(e) => setExpenseNote(e.target.value)}
-                  placeholder="Contoh: Belanja sayur di Warung Bu Siti"
-                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#6DA003]"
+                  placeholder={`Contoh: Belanja sayur di ${wilayahName}`}
+                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-2 flex justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowExpenseModal(false)}
-                  className="px-4 py-2 rounded-xl text-stone-600 text-xs font-medium hover:bg-stone-100"
+                  className="min-h-[44px] px-4 py-2 rounded-xl text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#6DA003] text-white font-bold text-xs hover:brightness-105 shadow-sm"
+                  style={{
+                    background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
+                  }}
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl text-white font-bold text-xs hover:brightness-105 shadow-sm cursor-pointer"
                 >
                   Simpan Pengeluaran
                 </button>
@@ -1060,9 +1157,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 6. MODAL KEAMANAN: AMANKAN AKUN KELUARGA IBU               */}
-      {/* ========================================================= */}
+      {/* 6. MODAL KEAMANAN: AMANKAN AKUN KELUARGA IBU */}
       {showSecurityModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
@@ -1072,10 +1167,10 @@ export default function DashboardPage() {
                   🛡️
                 </div>
                 <div>
-                  <h3 className="text-[18px] font-bold text-[#0D0101] leading-tight">
-                    Amankan Akun Keluarga Ibu
+                  <h3 className="text-[18px] font-extrabold text-[#0D0101] leading-tight">
+                    Amankan Akun {userProfileName}
                   </h3>
-                  <span className="text-[11px] font-semibold text-[#0C4B20]">
+                  <span className="text-[11px] font-bold text-[#0C4B20]">
                     Porsi Kita • Perlindungan Akun
                   </span>
                 </div>
@@ -1092,10 +1187,10 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <p className="text-[13px] text-[#5F5F5F] mt-3.5 leading-relaxed">
+            <p className="text-[13px] text-stone-600 mt-3.5 leading-relaxed">
               {isOver24Hours
-                ? 'Sudah lebih dari 24 jam akun keluarga Ibu belum memiliki kata sandi. Demi keamanan data keluarga dan anggaran belanja, mohon buat kata sandi baru untuk akun ini sebelum melanjutkan.'
-                : 'Ibu baru saja masuk tanpa kata sandi. Silakan buat kata sandi baru untuk melindungi akun keluarga saat masuk kembali.'}
+                ? `Sudah lebih dari 24 jam akun ${userProfileName} belum memiliki kata sandi. Demi keamanan data keluarga dan anggaran belanja, mohon buat kata sandi baru untuk akun ini sebelum melanjutkan.`
+                : `Ibu baru saja masuk tanpa kata sandi. Silakan buat kata sandi baru untuk melindungi akun ${userProfileName} saat masuk kembali.`}
             </p>
 
             {passwordError && (
@@ -1191,9 +1286,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 7. MODAL ATUR BUDGET BELANJA (BULANAN VS MINGGUAN)        */}
-      {/* ========================================================= */}
+      {/* 7. MODAL ATUR BUDGET BELANJA (BULANAN VS MINGGUAN) */}
       {showBudgetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
@@ -1203,10 +1296,10 @@ export default function DashboardPage() {
                   💰
                 </div>
                 <div>
-                  <h3 className="text-[18px] font-bold text-[#0D0101] leading-tight">
+                  <h3 className="text-[18px] font-extrabold text-[#0D0101] leading-tight">
                     Atur Budget Belanja
                   </h3>
-                  <span className="text-[11px] font-semibold text-[#0C4B20]">
+                  <span className="text-[11px] font-bold text-[#0C4B20]">
                     Porsi Kita • Pengaturan Anggaran Dapur
                   </span>
                 </div>
@@ -1221,7 +1314,7 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <p className="text-[13px] text-[#5F5F5F] mt-3.5 leading-relaxed">
+            <p className="text-[13px] text-stone-600 mt-3.5 leading-relaxed">
               Pilih tipe periode belanja Ibu (bulanan atau mingguan). Jika memilih mingguan, sistem otomatis mengalikan 4 minggu untuk menghitung total anggaran 1 bulan.
             </p>
 
@@ -1304,7 +1397,7 @@ export default function DashboardPage() {
                 const totalBulanan = inputTipeBudget === 'mingguan' ? num * 4 : num;
                 const perHari = Math.round(totalBulanan / 30);
                 return (
-                  <div className="p-3.5 rounded-2xl bg-[#F6F8F3] border border-[#0C4B20]/15 space-y-1.5 text-xs text-[#0D0101]">
+                  <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-1.5 text-xs text-[#0D0101]">
                     <div className="flex items-center justify-between font-bold text-[#0C4B20]">
                       <span>Total Anggaran 1 Bulan:</span>
                       <span className="text-sm tabular-nums">Rp {totalBulanan.toLocaleString('id-ID')}</span>
@@ -1314,7 +1407,7 @@ export default function DashboardPage() {
                         *Dihitung dari Rp {num.toLocaleString('id-ID')} × 4 minggu dalam 1 bulan
                       </p>
                     )}
-                    <div className="flex items-center justify-between text-stone-600 pt-1 border-t border-[#0C4B20]/10 text-[11px]">
+                    <div className="flex items-center justify-between text-stone-600 pt-1 border-t border-stone-200 text-[11px]">
                       <span>Estimasi batas aman per hari:</span>
                       <span className="font-semibold tabular-nums text-[#0D0101]">~Rp {perHari.toLocaleString('id-ID')} / hari</span>
                     </div>
