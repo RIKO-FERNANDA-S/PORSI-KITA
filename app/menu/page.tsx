@@ -134,51 +134,20 @@ const DEFAULT_LANGKAH = [
   'Sajikan hangat dan bagi porsi sesuai takaran pengali masing-masing anggota.',
 ];
 
-// Curated authentic culinary photos matching each recipe
-const FOTO_RESEP: Record<string, string> = {
-  RSP001: 'https://images.unsplash.com/photo-1516684732162-798a0062be99?auto=format&fit=crop&w=600&q=80',
-  RSP002: 'https://images.unsplash.com/photo-1541832676-9b763b0239ab?auto=format&fit=crop&w=600&q=80',
-  RSP003: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&q=80',
-  RSP004: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80',
-  RSP005: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80',
-  RSP006: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&q=80',
-  RSP007: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=600&q=80',
-  RSP008: 'https://images.unsplash.com/photo-1588168333986-5078d3ae3976?auto=format&fit=crop&w=600&q=80',
-  RSP009: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
-  RSP010: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
-  RSP011: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=600&q=80',
-  RSP012: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
-  RSP013: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&q=80',
-  RSP014: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80',
-  RSP015: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
-  RSP016: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&q=80',
-  RSP017: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80',
-  RSP018: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=600&q=80',
-  RSP019: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=600&q=80',
-};
-
-// Fallback photo based on recipe category
-function getFotoResep(resep: ResepMasakan): string {
-  if (FOTO_RESEP[resep.kode]) return FOTO_RESEP[resep.kode];
-  if (resep.kategori === 'Makanan Pokok') {
-    return 'https://images.unsplash.com/photo-1516684732162-798a0062be99?auto=format&fit=crop&w=600&q=80';
+// Foto masakan diambil dari database PostgreSQL (disimpan sebagai aset lokal .webp teroptimasi)
+function getFotoResep(resep: ResepMasakan, dbImageMap?: Record<string, string>): string {
+  if (dbImageMap && dbImageMap[resep.kode]) {
+    return dbImageMap[resep.kode];
   }
-  if (resep.kategori === 'Lauk Hewani') {
-    return 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&q=80';
-  }
-  if (resep.kategori === 'Lauk Nabati') {
-    return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
-  }
-  if (resep.kategori === 'Sayuran') {
-    return 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&q=80';
-  }
-  return 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=600&q=80';
+  // Default format WebP lokal sesuai yang terdaftar di database
+  return `/images/resep/${resep.kode}.webp`;
 }
 
 export default function MenuPage() {
   const [rencanaMenu, setRencanaMenu] = useState<RencanaMenu7Hari | null>(null);
   const [keluarga, setKeluarga] = useState<Keluarga | null>(null);
   const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
+  const [dbRecipeImages, setDbRecipeImages] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   // Layout UI states
@@ -209,6 +178,16 @@ export default function MenuPage() {
       setSelectedMemberTabId(a[0].id);
     }
     setLoading(false);
+
+    // Ambil gambar resep langsung dari database PostgreSQL
+    fetch('/api/resep')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.imageMap) {
+          setDbRecipeImages(data.imageMap);
+        }
+      })
+      .catch((err) => console.warn('Gagal memuat gambar resep database:', err));
   }, []);
 
   // Handle Regenerate Menu with Micro-interaction
@@ -779,7 +758,7 @@ export default function MenuPage() {
             {/* Grid 3 Hidangan */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {activeSesi.hidangan.map((dish) => {
-                const fotoUrl = getFotoResep(dish);
+                const fotoUrl = getFotoResep(dish, dbRecipeImages);
 
                 return (
                   <article
@@ -1093,7 +1072,7 @@ export default function MenuPage() {
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl overflow-hidden bg-stone-100 flex-shrink-0">
                   <img
-                    src={getFotoResep(detailResepModal)}
+                    src={getFotoResep(detailResepModal, dbRecipeImages)}
                     alt={detailResepModal.nama}
                     className="w-full h-full object-cover"
                   />
@@ -1312,7 +1291,7 @@ export default function MenuPage() {
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl overflow-hidden bg-stone-100 flex-shrink-0">
                           <img
-                            src={getFotoResep(opsi.resep)}
+                            src={getFotoResep(opsi.resep, dbRecipeImages)}
                             alt={opsi.resep.nama}
                             className="w-full h-full object-cover"
                           />

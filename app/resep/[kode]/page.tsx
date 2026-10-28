@@ -51,15 +51,15 @@ function ResepDetailContent({
         <p className="text-stone-600 text-sm mt-1">{resep.keterangan}</p>
       </div>
 
-      {kode === 'RSP013' && (
-        <div className="w-full h-64 sm:h-80 rounded-3xl overflow-hidden shadow-xs border border-stone-200">
-          <img
-            src="/images/resep/sayur-bening-bayam-jagung.webp"
-            alt={resep.nama}
-            className="w-full h-full object-cover"
-          />
-        </div>
-      )}
+      {/* Foto Masakan dari Database */}
+      <div className="w-full h-64 sm:h-80 rounded-3xl overflow-hidden shadow-xs border border-stone-200 bg-stone-100">
+        <img
+          src={`/images/resep/${kode}.webp`}
+          alt={resep.nama}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      </div>
 
       {/* Peringatan Keamanan Jika Ada */}
       {resep.catatan_keamanan && (

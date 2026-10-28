@@ -719,7 +719,7 @@ export default function DashboardPage() {
                             <img
                               className="w-full h-full object-cover"
                               alt="Sarapan Pagi"
-                              src="/images/resep/sayur-bening-bayam-jagung.webp"
+                              src={pagiSesi?.hidangan?.[0]?.kode ? `/images/resep/${pagiSesi.hidangan[0].kode}.webp` : '/images/resep/RSP013.webp'}
                             />
                             <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
                               <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
@@ -785,7 +785,7 @@ export default function DashboardPage() {
                             <img
                               className="w-full h-full object-cover"
                               alt="Makan Siang"
-                              src="https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=500&auto=format&fit=crop&q=80"
+                              src={siangSesi?.hidangan?.[0]?.kode ? `/images/resep/${siangSesi.hidangan[0].kode}.webp` : '/images/resep/RSP008.webp'}
                             />
                             <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
                               <span className="w-2 h-2 rounded-full bg-[#6DA003]" />
@@ -851,7 +851,7 @@ export default function DashboardPage() {
                             <img
                               className="w-full h-full object-cover"
                               alt="Makan Malam"
-                              src="https://images.unsplash.com/photo-1547592180-85f173990554?w=500&auto=format&fit=crop&q=80"
+                              src={malamSesi?.hidangan?.[0]?.kode ? `/images/resep/${malamSesi.hidangan[0].kode}.webp` : '/images/resep/RSP010.webp'}
                             />
                             <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
                               <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
