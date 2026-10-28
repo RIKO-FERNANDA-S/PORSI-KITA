@@ -16,7 +16,8 @@ interface ShoppingItem {
 
 export default function DashboardPage() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [selectedDayIndex, setSelectedDayIndex] = useState(1);
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number>(1);
   
   // Profil & Keluarga Database State
   const [userProfileName, setUserProfileName] = useState('Keluarga Kita');
@@ -76,6 +77,13 @@ export default function DashboardPage() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
   useEffect(() => {
+    // 0. Sinkronisasi realtime hari dan tanggal lokal pengguna
+    const now = new Date();
+    setCurrentDate(now);
+    const dayOfWeek = now.getDay();
+    const todayIndex = dayOfWeek === 0 ? 7 : dayOfWeek;
+    setSelectedDayIndex(todayIndex);
+
     // 1. Inisialisasi awal cepat dari Local Storage
     try {
       const storedKeluarga = getStoredKeluarga();
@@ -238,16 +246,76 @@ export default function DashboardPage() {
     );
   }, [rencanaMenu, selectedDayIndex]);
 
-  // Strip 7 Hari Menu
+  // Strip 7 Hari Menu dengan Tanggal Realtime (Senin s/d Minggu pada minggu berjalan)
   const daysList = useMemo(() => {
     const dayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-    return [1, 2, 3, 4, 5, 6, 7].map((num) => ({
-      hari_ke: num,
-      shortLabel: dayNames[(num - 1) % 7].slice(0, 3),
-      fullLabel: dayNames[(num - 1) % 7],
-      isCurrent: num === selectedDayIndex,
-    }));
-  }, [selectedDayIndex]);
+    const monthNamesShort = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    ];
+    const monthNamesFull = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+    ];
+
+    if (!currentDate) {
+      return [1, 2, 3, 4, 5, 6, 7].map((num) => ({
+        hari_ke: num,
+        shortLabel: dayNames[num - 1].slice(0, 3),
+        fullLabel: dayNames[num - 1],
+        dateNum: num,
+        monthShort: '',
+        monthFull: '',
+        year: 2026,
+        dateFormatted: `Hari ${num}`,
+        fullDateFormatted: `${dayNames[num - 1]}`,
+        isToday: false,
+        isCurrent: num === selectedDayIndex,
+      }));
+    }
+
+    const today = new Date(currentDate);
+    const dow = today.getDay(); // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
+    const offsetToMonday = dow === 0 ? -6 : 1 - dow;
+
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + offsetToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    return [1, 2, 3, 4, 5, 6, 7].map((num) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + (num - 1));
+
+      const dayName = dayNames[num - 1];
+      const dateNum = d.getDate();
+      const monthShort = monthNamesShort[d.getMonth()];
+      const monthFull = monthNamesFull[d.getMonth()];
+      const year = d.getFullYear();
+
+      const isToday =
+        d.getDate() === today.getDate() &&
+        d.getMonth() === today.getMonth() &&
+        d.getFullYear() === today.getFullYear();
+
+      return {
+        hari_ke: num,
+        shortLabel: dayName.slice(0, 3), // 'Sen', 'Sel', 'Rab', etc.
+        fullLabel: dayName,
+        dateNum,
+        monthShort,
+        monthFull,
+        year,
+        dateFormatted: `${dateNum} ${monthShort}`,
+        fullDateFormatted: `${dayName}, ${dateNum} ${monthFull} ${year}`,
+        isToday,
+        isCurrent: num === selectedDayIndex,
+      };
+    });
+  }, [currentDate, selectedDayIndex]);
+
+  const currentDayItem = useMemo(() => {
+    return daysList.find((d) => d.hari_ke === selectedDayIndex) || daysList[0];
+  }, [daysList, selectedDayIndex]);
 
   // Simpan password baru ke database
   const handleSaveSecurityPassword = async (e: React.FormEvent) => {
@@ -342,7 +410,7 @@ export default function DashboardPage() {
       `🛒 *Daftar Belanja Bahan - Porsi Kita*`,
       `Keluarga: *${userProfileName}*`,
       `Wilayah / Pasar: ${wilayahName}`,
-      `Hari: ${currentDayData?.label_hari || `Hari ke-${selectedDayIndex}`}`,
+      `Hari: ${currentDayItem?.fullDateFormatted || currentDayData?.label_hari || `Hari ke-${selectedDayIndex}`}`,
       '--------------------------------',
       ...shoppingList.map(
         (it) => `${it.checked ? '✅' : '◻️'} ${it.name} ${it.price > 0 ? `(Rp ${it.price.toLocaleString('id-ID')})` : ''}`
@@ -654,10 +722,17 @@ export default function DashboardPage() {
                 <section className="flex flex-col gap-4">
                   {/* Section Header */}
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <h2 className="text-[20px] font-extrabold text-[#0D0101]">Jadwal Masak Keluarga</h2>
-                      <span className="px-2.5 py-1 rounded-full bg-[#EAF5D8] text-[#0C4B20] text-[11px] font-bold border border-[#6DA003]/30">
-                        {currentDayData?.label_hari || `Hari ke-${selectedDayIndex}`}
+                      <span className="px-2.5 py-1 rounded-full bg-[#EAF5D8] text-[#0C4B20] text-[11px] font-bold border border-[#6DA003]/30 flex items-center gap-1.5">
+                        {currentDayItem?.isToday && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#6DA003] animate-pulse" />
+                        )}
+                        <span>
+                          {currentDayItem?.isToday
+                            ? `Hari Ini • ${currentDayItem.fullDateFormatted}`
+                            : currentDayItem?.fullDateFormatted || currentDayData?.label_hari || `Hari ke-${selectedDayIndex}`}
+                        </span>
                       </span>
                     </div>
 
@@ -679,20 +754,30 @@ export default function DashboardPage() {
                           type="button"
                           onClick={() => setSelectedDayIndex(item.hari_ke)}
                           style={{ backgroundColor: isSelected ? '#0C4B20' : undefined }}
-                          className={`flex-1 min-w-[64px] py-2.5 px-2 rounded-2xl flex flex-col items-center transition-all cursor-pointer ${
+                          className={`flex-1 min-w-[64px] py-2 px-1.5 rounded-2xl flex flex-col items-center transition-all cursor-pointer ${
                             isSelected
                               ? 'text-white shadow-xs relative'
+                              : item.isToday
+                              ? 'bg-[#F2F9EC] text-[#0C4B20] hover:bg-[#EAF5D8] border border-[#6DA003]/40'
                               : 'bg-white text-[#0D0101] hover:bg-stone-50 border border-stone-200'
                           }`}
                         >
-                          <span className={`text-[11px] font-bold ${isSelected ? 'text-[#B2F2B6]' : 'text-stone-500'}`}>
+                          <span className={`text-[11px] font-bold ${
+                            isSelected ? 'text-[#B2F2B6]' : item.isToday ? 'text-[#0C4B20]' : 'text-stone-500'
+                          }`}>
                             {item.shortLabel}
                           </span>
-                          <span className={`text-[16px] mt-0.5 ${isSelected ? 'font-extrabold' : 'font-semibold'}`}>
-                            H-{item.hari_ke}
+                          <span className={`text-[17px] mt-0.5 leading-tight ${
+                            isSelected ? 'font-extrabold text-white' : item.isToday ? 'font-extrabold text-[#0C4B20]' : 'font-bold text-[#0D0101]'
+                          }`}>
+                            {item.dateNum}
                           </span>
-                          {isSelected && (
+                          {isSelected ? (
                             <span className="w-1.5 h-1.5 rounded-full mt-1 bg-[#6DA003]" />
+                          ) : item.isToday ? (
+                            <span className="text-[9px] font-extrabold text-[#6DA003] leading-none mt-1">Hari ini</span>
+                          ) : (
+                            <span className="text-[10px] text-stone-400 leading-none mt-1">{item.monthShort}</span>
                           )}
                         </button>
                       );
