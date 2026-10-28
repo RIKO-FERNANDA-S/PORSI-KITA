@@ -115,6 +115,7 @@ model Bahan {
   vitamin_a_mcg    Float?
   bdd_percent      Float
   alergen          String[]      @default([])
+  image_url        String?       @db.VarChar(255)
   
   harga_warung     HargaWarung[]
   resep_bahan      ResepBahan[]
@@ -130,6 +131,7 @@ model Resep {
   keterangan            String?         @db.Text
   catatan_keamanan      String?         @db.Text
   target_usia_max_tahun Int?
+  image_url             String?         @db.VarChar(255)
   
   resep_bahan           ResepBahan[]
   paket_komponen        PaketKomponen[]

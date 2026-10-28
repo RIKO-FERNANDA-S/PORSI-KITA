@@ -719,7 +719,7 @@ export default function DashboardPage() {
                             <img
                               className="w-full h-full object-cover"
                               alt="Sarapan Pagi"
-                              src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80"
+                              src="/images/resep/sayur-bening-bayam-jagung.webp"
                             />
                             <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
                               <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />

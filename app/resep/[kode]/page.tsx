@@ -51,6 +51,16 @@ function ResepDetailContent({
         <p className="text-stone-600 text-sm mt-1">{resep.keterangan}</p>
       </div>
 
+      {kode === 'RSP013' && (
+        <div className="w-full h-64 sm:h-80 rounded-3xl overflow-hidden shadow-xs border border-stone-200">
+          <img
+            src="/images/resep/sayur-bening-bayam-jagung.webp"
+            alt={resep.nama}
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
+
       {/* Peringatan Keamanan Jika Ada */}
       {resep.catatan_keamanan && (
         <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs leading-relaxed flex items-start gap-2.5">
