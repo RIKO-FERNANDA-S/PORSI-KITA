@@ -172,6 +172,46 @@ export function generateMenu(input: GenerateInput): RencanaMenu7Hari {
       sesiSiang = susunSesiDariPaket(kodePaket, 'siang', anggota, kebutuhanMap);
       sesiMalam = susunSesiDariPaket(kodePaket, 'malam', anggota, kebutuhanMap);
     } else {
+      // 1. Tentukan sayur harian keluarga:
+      // - Pagi ke siang SELALU 1 kali masak (sayur yang sama untuk sarapan & siang).
+      // - Malam: ~50% 1 kali masak seharian (sayur sama), ~50% 2 kali masak (sayur segar malam ke-2).
+      const kandidatSayurPagiSiang = poolSayur.filter((r) =>
+        cekAturanVariasi(r, i, riwayatResepPerHari, frekuensiResepMingguan)
+      );
+      const sayurPagiSiang =
+        kandidatSayurPagiSiang.length > 0
+          ? kandidatSayurPagiSiang[Math.floor(rng() * kandidatSayurPagiSiang.length)]
+          : poolSayur[Math.floor(rng() * poolSayur.length)];
+
+      if (sayurPagiSiang) {
+        frekuensiResepMingguan.set(
+          sayurPagiSiang.kode,
+          (frekuensiResepMingguan.get(sayurPagiSiang.kode) || 0) + 1
+        );
+      }
+
+      // Tentukan sayur untuk malam (1x masak seharian atau 2x masak sayur segar baru)
+      const masakDuaKali = rng() > 0.45;
+      let sayurMalam = sayurPagiSiang;
+
+      if (masakDuaKali && poolSayur.length > 1) {
+        const poolSayurMalam = poolSayur.filter((r) => r.kode !== sayurPagiSiang?.kode);
+        const kandidatSayurMalam = poolSayurMalam.filter((r) =>
+          cekAturanVariasi(r, i, riwayatResepPerHari, frekuensiResepMingguan)
+        );
+        sayurMalam =
+          kandidatSayurMalam.length > 0
+            ? kandidatSayurMalam[Math.floor(rng() * kandidatSayurMalam.length)]
+            : poolSayurMalam[Math.floor(rng() * poolSayurMalam.length)];
+
+        if (sayurMalam && sayurMalam.kode !== sayurPagiSiang?.kode) {
+          frekuensiResepMingguan.set(
+            sayurMalam.kode,
+            (frekuensiResepMingguan.get(sayurMalam.kode) || 0) + 1
+          );
+        }
+      }
+
       // Susun 3 sesi makan dengan algoritma rule-based & variasi
       const susunSesi = (sesi: 'pagi' | 'siang' | 'malam'): SesiMakan => {
         const fraksi = FRAKSI_SESI_MAKAN[sesi];
@@ -230,21 +270,10 @@ export function generateMenu(input: GenerateInput): RencanaMenu7Hari {
           );
         }
 
-        // 4. Sayuran
-        const kandidatSayur = poolSayur.filter((r) =>
-          cekAturanVariasi(r, i, riwayatResepPerHari, frekuensiResepMingguan)
-        );
-        const sayur =
-          kandidatSayur.length > 0
-            ? kandidatSayur[Math.floor(rng() * kandidatSayur.length)]
-            : poolSayur[Math.floor(rng() * poolSayur.length)];
-
+        // 4. Sayuran (Pagi & Siang SELALU berbagi sayur yang sama; Malam sayur sama atau sayur segar ke-2)
+        const sayur = sesi === 'malam' ? sayurMalam : sayurPagiSiang;
         if (sayur) {
           hidangan.push(sayur);
-          frekuensiResepMingguan.set(
-            sayur.kode,
-            (frekuensiResepMingguan.get(sayur.kode) || 0) + 1
-          );
         }
 
         // 5. Buah atau Susu (pagi/siang)

@@ -358,13 +358,25 @@ export default function MenuPage() {
       kebutuhanMap.set(ang.id, hitungKebutuhan(ang));
     });
 
-    // 2. Update dish list in active session
+    const isSayur = resepTargetSwap.kategori === 'Sayuran';
+    const isPagiOrSiang = sesiTargetSwap === 'pagi' || sesiTargetSwap === 'siang';
+    const counterpartSesiKey = sesiTargetSwap === 'pagi' ? 'siang' : 'pagi';
+
+    // Cek apakah sesi pasangannya (Pagi <-> Siang) memiliki sayur yang sama (karena masak 1x)
+    const counterpartSharesVeg =
+      isSayur &&
+      isPagiOrSiang &&
+      currentHari.sesi_makan[counterpartSesiKey].hidangan.some(
+        (h) => h.kode === resepTargetSwap.kode
+      );
+
+    // 2. Update hidangan di sesi target
     const currentSesi = currentHari.sesi_makan[sesiTargetSwap];
     const updatedHidangan = currentSesi.hidangan.map((h) =>
       h.kode === resepTargetSwap.kode ? resepBaru : h
     );
 
-    // 3. Recalculate session portions
+    // 3. Recalculate session portions for active session
     const fraksi = FRAKSI_SESI_MAKAN[sesiTargetSwap];
     const labelSesi =
       sesiTargetSwap === 'pagi'
@@ -389,9 +401,38 @@ export default function MenuPage() {
       porsi_per_anggota: porsiPerAnggota,
     };
 
+    // Update counterpart session (Pagi <-> Siang) jika keduanya berbagi sayur yang sama
+    let updatedCounterpartSesi: SesiMakan | null = null;
+    if (counterpartSharesVeg) {
+      const counterpartSesi = currentHari.sesi_makan[counterpartSesiKey];
+      const counterpartHidangan = counterpartSesi.hidangan.map((h) =>
+        h.kode === resepTargetSwap.kode ? resepBaru : h
+      );
+      const counterpartFraksi = FRAKSI_SESI_MAKAN[counterpartSesiKey];
+      const counterpartLabel =
+        counterpartSesiKey === 'pagi' ? 'Sarapan Pagi' : 'Makan Siang';
+
+      const resCounterpart = hitungPorsiSesiMakan(
+        anggotaList,
+        kebutuhanMap,
+        counterpartHidangan,
+        counterpartFraksi
+      );
+
+      updatedCounterpartSesi = {
+        sesi: counterpartSesiKey,
+        label: counterpartLabel,
+        persentase_energi: counterpartFraksi,
+        hidangan: counterpartHidangan,
+        total_energi_standar_kcal: resCounterpart.totalEnergiDasar,
+        porsi_per_anggota: resCounterpart.porsiPerAnggota,
+      };
+    }
+
     const newSesiMakan = {
       ...currentHari.sesi_makan,
       [sesiTargetSwap]: updatedSesi,
+      ...(updatedCounterpartSesi ? { [counterpartSesiKey]: updatedCounterpartSesi } : {}),
     };
 
     // 4. Recalculate day cost
@@ -510,6 +551,14 @@ export default function MenuPage() {
     rencanaMenu.hari.find((h) => h.hari_ke === selectedDayIndex) || rencanaMenu.hari[0];
   const activeCalDay = calendarDays.find((c) => c.hari_ke === selectedDayIndex);
   const activeSesi = activeDay.sesi_makan[activeMealTab];
+
+  // Status sayuran harian (apakah 1x masak pagi-siang / 1x seharian / 2x masak)
+  const sayurPagi = activeDay.sesi_makan.pagi.hidangan.find((h) => h.kategori === 'Sayuran');
+  const sayurSiang = activeDay.sesi_makan.siang.hidangan.find((h) => h.kategori === 'Sayuran');
+  const sayurMalam = activeDay.sesi_makan.malam.hidangan.find((h) => h.kategori === 'Sayuran');
+
+  const isSayurPagiSiangSama = !!(sayurPagi && sayurSiang && sayurPagi.kode === sayurSiang.kode);
+  const isSayurMalamSama = !!(sayurMalam && sayurPagi && sayurMalam.kode === sayurPagi.kode);
 
   // Calculate session cost
   const estBiayaSesi = activeSesi.hidangan.reduce((sum, h) => {
@@ -927,10 +976,12 @@ export default function MenuPage() {
                   <p className="text-[12px] text-[#737a65]">
                     Alokasi {Math.round(activeSesi.persentase_energi * 100)}% Gizi Harian •{' '}
                     {activeMealTab === 'pagi'
-                      ? '06:30 WIB'
+                      ? '06:30 WIB • Masak sayur 1x untuk Pagi & Siang'
                       : activeMealTab === 'siang'
-                      ? '12:30 WIB'
-                      : '18:30 WIB'}
+                      ? '12:30 WIB • Lanjutan porsi sayur pagi'
+                      : isSayurMalamSama
+                      ? '18:30 WIB • Porsi sayur praktis seharian'
+                      : '18:30 WIB • Masak ke-2: Sayur segar malam'}
                   </p>
                 </div>
               </div>
@@ -938,6 +989,31 @@ export default function MenuPage() {
               <span className="px-3.5 py-1.5 rounded-full bg-[#fff0ef] text-[#2c1514] text-[12px] font-semibold font-mono border border-stone-200/60">
                 Est. Biaya Sesi: Rp {Math.round(estBiayaSesi).toLocaleString('id-ID')}
               </span>
+            </div>
+
+            {/* Banner Praktis Masak Sayur & Kepastian Gizi */}
+            <div className="flex items-center gap-3 p-3 sm:p-3.5 bg-gradient-to-r from-emerald-50 to-amber-50/50 border border-emerald-200/60 rounded-2xl text-[12.5px] text-[#2c1514]">
+              <span className="text-2xl shrink-0">🍲</span>
+              <div className="leading-snug">
+                <span className="font-bold text-[#155126]">
+                  {activeMealTab === 'pagi'
+                    ? 'Masak Sayur 1x untuk Pagi & Siang: '
+                    : activeMealTab === 'siang'
+                    ? 'Porsi Lanjutan Sayur Pagi: '
+                    : isSayurMalamSama
+                    ? 'Sayur Seharian Praktis: '
+                    : 'Masak ke-2: Sayur Segar Malam: '}
+                </span>
+                <span className="text-[#555a48]">
+                  {activeMealTab === 'pagi'
+                    ? 'Sup sayur cukup dimasak 1 kali di pagi hari untuk porsi Sarapan (30%) & Makan Siang (40%). Praktis, hemat gas, dan kebutuhan gizi sayuran seluruh anggota keluarga tetap terpenuhi 100%.'
+                    : activeMealTab === 'siang'
+                    ? 'Menyajikan porsi lanjutan yang sudah dimasak sejak pagi. Ibu tidak perlu memasak sayur dari nol—cukup hangatkan sebentar.'
+                    : isSayurMalamSama
+                    ? 'Santap malam praktis dengan sayur yang sama untuk melengkapi 30% sisa AKG sayuran harian keluarga.'
+                    : 'Sayur segar kedua dimasak hangat untuk makan malam guna variasi selera dan kesegaran serat sekeluarga.'}
+                </span>
+              </div>
             </div>
 
             {/* Grid 3 Hidangan */}
@@ -963,6 +1039,37 @@ export default function MenuPage() {
                           {dish.kategori}
                         </span>
                       </div>
+
+                      {/* Efisiensi Masak Sayur Badge jika hidangan adalah sayuran */}
+                      {dish.kategori === 'Sayuran' && (
+                        <div className="pt-0.5">
+                          {activeMealTab === 'pagi' && isSayurPagiSiangSama && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200/80">
+                              <span>🍲</span>
+                              <span>Masak 1x (Porsi Pagi &amp; Siang)</span>
+                            </span>
+                          )}
+                          {activeMealTab === 'siang' && isSayurPagiSiangSama && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-[11px] font-semibold border border-amber-200/80">
+                              <span>🍲</span>
+                              <span>Porsi Lanjutan Pagi (Tanpa Masak Ulang)</span>
+                            </span>
+                          )}
+                          {activeMealTab === 'malam' && (
+                            isSayurMalamSama ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200/80">
+                                <span>🍲</span>
+                                <span>Masak 1x Seharian (Praktis)</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 text-[11px] font-semibold border border-sky-200/80">
+                                <span>🥬</span>
+                                <span>Masak ke-2: Sayur Segar Malam</span>
+                              </span>
+                            )
+                          )}
+                        </div>
+                      )}
 
                       {/* Title & Nutritional Overview */}
                       <div>
@@ -1558,6 +1665,15 @@ export default function MenuPage() {
             <p className="text-xs text-[#434937]">
               Pilih hidangan pengganti dalam kategori <strong>{resepTargetSwap.kategori}</strong> yang tetap aman dari alergen dan sesuai anggaran:
             </p>
+
+            {resepTargetSwap.kategori === 'Sayuran' && (sesiTargetSwap === 'pagi' || sesiTargetSwap === 'siang') && (
+              <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-[11.5px] leading-snug">
+                <span className="text-base">💡</span>
+                <span>
+                  <strong>Hemat Waktu (Masak 1x):</strong> Menukar sayuran ini akan otomatis memperbarui porsi di sesi {sesiTargetSwap === 'pagi' ? 'Makan Siang' : 'Sarapan Pagi'} agar masakan tetap selaras dan Anda cukup masak 1 kali di pagi hari.
+                </span>
+              </div>
+            )}
 
             <div className="space-y-2.5 max-h-[45vh] overflow-y-auto pr-1">
               {opsiSwap.length === 0 ? (

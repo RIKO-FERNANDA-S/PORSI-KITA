@@ -34,6 +34,22 @@ describe('Menu Generator: 3 Profil Tetap PRD (PRD 9 & 17)', () => {
       ];
       const hasLiver = allDishes.some((d) => d.kode === 'RSP004');
       expect(hasLiver).toBe(false);
+
+      // Verifikasi efisiensi masak sayur keluarga Indonesia:
+      // Pagi & Siang SELALU berbagi sayur yang sama (cukup masak 1x di pagi hari)
+      const sayurPagi = h.sesi_makan.pagi.hidangan.find((d) => d.kategori === 'Sayuran');
+      const sayurSiang = h.sesi_makan.siang.hidangan.find((d) => d.kategori === 'Sayuran');
+      const sayurMalam = h.sesi_makan.malam.hidangan.find((d) => d.kategori === 'Sayuran');
+
+      expect(sayurPagi).toBeDefined();
+      expect(sayurSiang).toBeDefined();
+      expect(sayurPagi!.kode).toBe(sayurSiang!.kode); // Pagi & Siang 100% identik
+
+      // Jumlah masakan sayur unik per hari maksimal 2 (1x masak seharian atau 2x masak)
+      const sayurCodesToday = new Set(
+        [sayurPagi?.kode, sayurSiang?.kode, sayurMalam?.kode].filter(Boolean)
+      );
+      expect(sayurCodesToday.size).toBeLessThanOrEqual(2);
     }
   });
 
@@ -146,6 +162,40 @@ describe('Menu Generator: 3 Profil Tetap PRD (PRD 9 & 17)', () => {
       expect(opt.resep.kategori).toBe('Lauk Hewani');
       expect(opt.resep.alergen).not.toContain('ikan');
       expect(opt.resep.kode).not.toBe('RSP003');
+    }
+  });
+
+  it('24. Efisiensi masak sup sayur 1x untuk pagi-siang atau 2x sehari dengan pemenuhan gizi keluarga terjamin', () => {
+    const anggota: Anggota[] = [
+      { id: '1', alias: 'Ayah', usia_tahun: 36, jenis_kelamin: 'L', status: 'umum', alergen: [] },
+      { id: '2', alias: 'Ibu', usia_tahun: 33, jenis_kelamin: 'P', status: 'umum', alergen: [] },
+      { id: '3', alias: 'Anak', usia_tahun: 6, jenis_kelamin: 'P', status: 'umum', alergen: [] },
+    ];
+
+    const menu = generateMenu({
+      familyId: 'fam-sayur-efisien',
+      budgetHarianRp: 80000,
+      anggota,
+      seed: 'sayur-seed-123',
+    });
+
+    for (const hari of menu.hari) {
+      const sayurPagi = hari.sesi_makan.pagi.hidangan.find((d) => d.kategori === 'Sayuran');
+      const sayurSiang = hari.sesi_makan.siang.hidangan.find((d) => d.kategori === 'Sayuran');
+      const sayurMalam = hari.sesi_makan.malam.hidangan.find((d) => d.kategori === 'Sayuran');
+
+      // Pagi dan Siang selalu sama persis
+      expect(sayurPagi).toBeDefined();
+      expect(sayurSiang).toBeDefined();
+      expect(sayurPagi!.kode).toBe(sayurSiang!.kode);
+
+      // Sesi malam bisa sama (1x masak) atau sayur segar baru (2x masak)
+      // Yang pasti masakan sayur unik harian <= 2
+      const sayurCodes = new Set([sayurPagi!.kode, sayurSiang!.kode, sayurMalam?.kode].filter(Boolean));
+      expect(sayurCodes.size).toBeLessThanOrEqual(2);
+
+      // Gizi keluarga tetap terpenuhi dengan baik (skor rata-rata keluarga tinggi)
+      expect(hari.skor_keluarga.skor_rata_rata).toBeGreaterThan(70);
     }
   });
 });
