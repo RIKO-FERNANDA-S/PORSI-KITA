@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../../components/Sidebar';
 import { ItemDaftarBelanja, RencanaMenu7Hari, Keluarga, Anggota } from '../../../lib/types';
-import { getStoredMenu, getStoredKeluarga, getStoredAnggota } from '../../../lib/store';
+import { getStoredMenu, getStoredKeluarga, getStoredAnggota, saveStoredMenu } from '../../../lib/store';
 import { buatDaftarBelanjaMingguan } from '../../../lib/planner/cost';
 
 interface TitipanItem {
@@ -17,6 +17,8 @@ interface TitipanItem {
 interface PageProps {
   params?: Promise<{ id?: string }>;
 }
+
+const STORAGE_KEY_KULKAS = 'porsi_kita_kulkas_stok';
 
 // Icon mapper per kategori lapak pasar tradisional
 function getKategoriIcon(kategori: string) {
@@ -58,8 +60,9 @@ function BelanjaContent({ params }: PageProps) {
   const [fridgeMap, setFridgeMap] = useState<Record<string, boolean>>({});
   const [hideFridge, setHideFridge] = useState(false);
   const [periodeFilter, setPeriodeFilter] = useState<'1_minggu' | '3_hari' | 'hari_ini'>('1_minggu');
-  const [statusFilter, setStatusFilter] = useState<'semua' | 'belum_dibeli' | 'sudah_dibeli'>('semua');
+  const [statusFilter, setStatusFilter] = useState<'semua' | 'belum_dibeli' | 'kulkas' | 'sudah_dibeli'>('semua');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showRecipeList, setShowRecipeList] = useState(false);
 
   // Quick item titipan (tambah item mendadak di pasar)
   const [titipanList, setTitipanList] = useState<TitipanItem[]>([]);
@@ -77,29 +80,45 @@ function BelanjaContent({ params }: PageProps) {
   const [finishCatatan, setFinishCatatan] = useState('Belanja bahan segar di pasar tradisional');
   const [isSubmittingFinish, setIsSubmittingFinish] = useState(false);
 
+  // Load data awal dari database PostgreSQL & Local Storage
   useEffect(() => {
     async function loadData() {
       try {
         const k = getStoredKeluarga();
         const a = getStoredAnggota();
-        const m = getStoredMenu();
+        let m = getStoredMenu();
 
         setKeluarga(k);
         setAnggotaList(a);
+
+        // 1. Ambil menu 7 hari terbaru langsung dari database PostgreSQL
+        try {
+          const resMenu = await fetch('/api/menu');
+          if (resMenu.ok) {
+            const dataMenu = await resMenu.json();
+            if (dataMenu.success && dataMenu.menu) {
+              m = dataMenu.menu;
+              saveStoredMenu(dataMenu.menu);
+            }
+          }
+        } catch (err) {
+          console.warn('Gagal memuat menu dari database:', err);
+        }
+
         setRencanaMenu(m);
 
-        // Ambil data budget ter-update dari database bila tersedia
+        // 2. Ambil data budget ter-update dari database bila tersedia
         try {
           const resBudget = await fetch('/api/family/budget');
           if (resBudget.ok) {
             const budgetData = await resBudget.json();
-            if (budgetData.family) {
+            if (budgetData.alias || budgetData.budget_belanja) {
               setKeluarga((prev) => ({
                 ...(prev || k),
-                alias: budgetData.family.alias || prev?.alias || k.alias,
-                wilayah: budgetData.family.wilayah || prev?.wilayah || k.wilayah,
-                budget_belanja: budgetData.family.budget_belanja || prev?.budget_belanja,
-                tipe_budget: budgetData.family.tipe_budget || prev?.tipe_budget,
+                alias: budgetData.alias || prev?.alias || k.alias,
+                wilayah: budgetData.wilayah || prev?.wilayah || k.wilayah,
+                budget_belanja: budgetData.budget_belanja || prev?.budget_belanja,
+                tipe_budget: budgetData.tipe_budget || prev?.tipe_budget,
               }));
             }
           }
@@ -108,31 +127,38 @@ function BelanjaContent({ params }: PageProps) {
         }
 
         if (m && m.hari && m.hari.length > 0) {
-          // Hitung daftar bahan sesuai periode pilihan
-          const targetHariList =
-            periodeFilter === 'hari_ini'
-              ? m.hari.slice(0, 1)
-              : periodeFilter === '3_hari'
-              ? m.hari.slice(0, 3)
-              : m.hari;
-
+          // Hitung daftar bahan sesuai periode pilihan default (1 Minggu)
+          const targetHariList = m.hari.slice(0, 7);
           const items = buatDaftarBelanjaMingguan(targetHariList);
           setDaftarBelanja(items);
 
-          // Inisialisasi otomatis bahan awet yang biasanya sudah tersedia di kulkas/dapur
-          const initialFridge: Record<string, boolean> = {};
-          items.forEach((it) => {
-            const lower = it.nama_bahan.toLowerCase();
-            if (
-              lower.includes('garam') ||
-              lower.includes('minyak') ||
-              lower.includes('merica') ||
-              lower.includes('lada') ||
-              lower.includes('gula')
-            ) {
-              initialFridge[it.kode_tkpi] = true;
+          // Restore preferensi stok kulkas dari localStorage atau gunakan default awet
+          let initialFridge: Record<string, boolean> = {};
+          try {
+            const rawF = localStorage.getItem(STORAGE_KEY_KULKAS);
+            if (rawF) {
+              initialFridge = JSON.parse(rawF);
             }
-          });
+          } catch {}
+
+          if (Object.keys(initialFridge).length === 0) {
+            items.forEach((it) => {
+              const lower = it.nama_bahan.toLowerCase();
+              if (
+                lower.includes('garam') ||
+                lower.includes('minyak') ||
+                lower.includes('merica') ||
+                lower.includes('lada') ||
+                lower.includes('gula')
+              ) {
+                initialFridge[it.kode_tkpi] = true;
+              }
+            });
+            try {
+              localStorage.setItem(STORAGE_KEY_KULKAS, JSON.stringify(initialFridge));
+            } catch {}
+          }
+
           setFridgeMap(initialFridge);
         }
       } catch (e) {
@@ -153,7 +179,7 @@ function BelanjaContent({ params }: PageProps) {
           ? rencanaMenu.hari.slice(0, 1)
           : periodeFilter === '3_hari'
           ? rencanaMenu.hari.slice(0, 3)
-          : rencanaMenu.hari;
+          : rencanaMenu.hari.slice(0, 7);
 
       const items = buatDaftarBelanjaMingguan(targetHariList);
       setDaftarBelanja(items);
@@ -165,6 +191,88 @@ function BelanjaContent({ params }: PageProps) {
     setTimeout(() => setToastMsg(''), 3000);
   };
 
+  // Resep masakan yang termasuk dalam periode filter saat ini
+  const resepDalamPeriode = useMemo(() => {
+    if (!rencanaMenu?.hari) return [];
+    const targetHari =
+      periodeFilter === 'hari_ini'
+        ? rencanaMenu.hari.slice(0, 1)
+        : periodeFilter === '3_hari'
+        ? rencanaMenu.hari.slice(0, 3)
+        : rencanaMenu.hari.slice(0, 7);
+
+    const map = new Map<string, { kode: string; nama: string; kategori: string }>();
+    for (const h of targetHari) {
+      const sesiList = [h.sesi_makan.pagi, h.sesi_makan.siang, h.sesi_makan.malam];
+      for (const s of sesiList) {
+        for (const hid of s.hidangan) {
+          if (!map.has(hid.kode)) {
+            map.set(hid.kode, { kode: hid.kode, nama: hid.nama, kategori: hid.kategori });
+          }
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [rencanaMenu, periodeFilter]);
+
+  // Kalkulasi penghematan dari stok kulkas
+  const totalBiayaSemuaBahan = useMemo(() => {
+    return daftarBelanja.reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
+  }, [daftarBelanja]);
+
+  const totalHematKulkas = useMemo(() => {
+    return daftarBelanja
+      .filter((it) => fridgeMap[it.kode_tkpi])
+      .reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
+  }, [daftarBelanja, fridgeMap]);
+
+  const jumlahBahanKulkas = useMemo(() => {
+    return daftarBelanja.filter((it) => fridgeMap[it.kode_tkpi]).length;
+  }, [daftarBelanja, fridgeMap]);
+
+  const totalTitipan = useMemo(() => {
+    return titipanList.reduce((sum, item) => sum + item.estimasiRp, 0);
+  }, [titipanList]);
+
+  // Total biaya belanja pasar nyata (sudah dikurangi bahan yang ada di kulkas + titipan)
+  const totalBiayaBelanjaPasar = useMemo(() => {
+    const bahanPerluDibeli = daftarBelanja
+      .filter((it) => !fridgeMap[it.kode_tkpi])
+      .reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
+    return bahanPerluDibeli + totalTitipan;
+  }, [daftarBelanja, fridgeMap, totalTitipan]);
+
+  // Total biaya bahan pasar yang sudah dicentang/dibeli
+  const totalSudahDibeli = useMemo(() => {
+    const bahanPasarDibeli = daftarBelanja
+      .filter((it) => !fridgeMap[it.kode_tkpi] && checkedMap[it.kode_tkpi])
+      .reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
+    return bahanPasarDibeli;
+  }, [daftarBelanja, fridgeMap, checkedMap]);
+
+  // Sisa kebutuhan belanja pasar yang belum dibeli
+  const totalSisaKebutuhan = Math.max(0, totalBiayaBelanjaPasar - totalSudahDibeli);
+
+  // Target batas belanja sesuai periode
+  const batasAmanRp = useMemo(() => {
+    let budgetHarian = 85000;
+    if (keluarga?.budget_belanja) {
+      const nominal = Number(keluarga.budget_belanja);
+      budgetHarian = keluarga.tipe_budget === 'mingguan' ? Math.round(nominal / 7) : Math.round(nominal / 30);
+    } else if (rencanaMenu?.budget_harian_rp) {
+      budgetHarian = rencanaMenu.budget_harian_rp;
+    }
+
+    if (periodeFilter === 'hari_ini') return budgetHarian;
+    if (periodeFilter === '3_hari') return budgetHarian * 3;
+    return budgetHarian * 7;
+  }, [keluarga, rencanaMenu, periodeFilter]);
+
+  const persentaseDibeli =
+    totalBiayaBelanjaPasar > 0
+      ? Math.min(100, Math.round((totalSudahDibeli / totalBiayaBelanjaPasar) * 100))
+      : 100;
+
   // Filter items berdasarkan stok kulkas, status pembelian, dan pencarian nama/lapak
   const displayedItems = useMemo(() => {
     let items = [...daftarBelanja];
@@ -174,11 +282,13 @@ function BelanjaContent({ params }: PageProps) {
       items = items.filter((it) => !fridgeMap[it.kode_tkpi]);
     }
 
-    // Filter status beli
+    // Filter status
     if (statusFilter === 'belum_dibeli') {
-      items = items.filter((it) => !checkedMap[it.kode_tkpi]);
+      items = items.filter((it) => !fridgeMap[it.kode_tkpi] && !checkedMap[it.kode_tkpi]);
+    } else if (statusFilter === 'kulkas') {
+      items = items.filter((it) => fridgeMap[it.kode_tkpi]);
     } else if (statusFilter === 'sudah_dibeli') {
-      items = items.filter((it) => checkedMap[it.kode_tkpi]);
+      items = items.filter((it) => !fridgeMap[it.kode_tkpi] && checkedMap[it.kode_tkpi]);
     }
 
     // Filter teks pencarian
@@ -206,42 +316,15 @@ function BelanjaContent({ params }: PageProps) {
     return Array.from(map.entries());
   }, [displayedItems]);
 
-  // Hitung jumlah bahan yang ada di kulkas
-  const fridgeCount = useMemo(() => {
-    return Object.values(fridgeMap).filter(Boolean).length;
-  }, [fridgeMap]);
+  // Bahan yang perlu dibeli di pasar namun belum dicentang
+  const itemsBelumDibeli = useMemo(() => {
+    return daftarBelanja.filter((item) => !fridgeMap[item.kode_tkpi] && !checkedMap[item.kode_tkpi]);
+  }, [daftarBelanja, fridgeMap, checkedMap]);
 
-  // Kalkulasi total estimasi biaya belanja
-  const totalBiayaEstimasi = useMemo(() => {
-    const itemTotal = displayedItems.reduce((sum, item) => sum + item.estimasi_biaya_rp, 0);
-    const titipanTotal = titipanList.reduce((sum, item) => sum + item.estimasiRp, 0);
-    return itemTotal + titipanTotal;
-  }, [displayedItems, titipanList]);
-
-  // Total biaya bahan yang sudah dicentang/dibeli
-  const totalSudahDibeli = useMemo(() => {
-    const itemsCheckedTotal = displayedItems
-      .filter((item) => checkedMap[item.kode_tkpi])
-      .reduce((sum, item) => sum + item.estimasi_biaya_rp, 0);
-    return itemsCheckedTotal;
-  }, [displayedItems, checkedMap]);
-
-  const totalSisaKebutuhan = Math.max(0, totalBiayaEstimasi - totalSudahDibeli);
-
-  // Target batas belanja mingguan
-  const batasAmanRp = useMemo(() => {
-    if (keluarga?.budget_belanja) {
-      const nominal = Number(keluarga.budget_belanja);
-      if (keluarga.tipe_budget === 'mingguan') return nominal;
-      return Math.round(nominal / 4);
-    }
-    return rencanaMenu?.target_budget_mingguan_rp || 250000;
-  }, [keluarga, rencanaMenu]);
-
-  const persentaseDibeli =
-    totalBiayaEstimasi > 0
-      ? Math.min(100, Math.round((totalSudahDibeli / totalBiayaEstimasi) * 100))
-      : 0;
+  // Bahan yang ada di kulkas
+  const itemsDiKulkas = useMemo(() => {
+    return daftarBelanja.filter((item) => fridgeMap[item.kode_tkpi]);
+  }, [daftarBelanja, fridgeMap]);
 
   // Toggle checklist beli per item
   const toggleCheck = (kodeTkpi: string) => {
@@ -253,9 +336,12 @@ function BelanjaContent({ params }: PageProps) {
 
   // Tandai seluruh item dalam 1 lapak sebagai dibeli / belum
   const toggleKategoriAll = (items: ItemDaftarBelanja[]) => {
-    const allChecked = items.every((it) => checkedMap[it.kode_tkpi]);
+    const nonFridgeItems = items.filter((it) => !fridgeMap[it.kode_tkpi]);
+    if (nonFridgeItems.length === 0) return;
+
+    const allChecked = nonFridgeItems.every((it) => checkedMap[it.kode_tkpi]);
     const nextMap = { ...checkedMap };
-    items.forEach((it) => {
+    nonFridgeItems.forEach((it) => {
       nextMap[it.kode_tkpi] = !allChecked;
     });
     setCheckedMap(nextMap);
@@ -266,16 +352,22 @@ function BelanjaContent({ params }: PageProps) {
     );
   };
 
-  // Toggle status stok di kulkas
+  // Toggle status stok di kulkas (otomatis memotong budget & menyimpan ke localStorage)
   const toggleFridge = (e: React.MouseEvent, kodeTkpi: string) => {
     e.stopPropagation();
     setFridgeMap((prev) => {
       const next = !prev[kodeTkpi];
-      showToast(next ? 'Bahan ditandai ada di stok kulkas.' : 'Bahan dihapus dari stok kulkas.');
-      return {
-        ...prev,
-        [kodeTkpi]: next,
-      };
+      const updated = { ...prev, [kodeTkpi]: next };
+      try {
+        localStorage.setItem(STORAGE_KEY_KULKAS, JSON.stringify(updated));
+      } catch {}
+
+      showToast(
+        next
+          ? 'Bahan tersimpan di Kulkas. Anggaran belanja otomatis lebih hemat!'
+          : 'Bahan dihapus dari Kulkas. Masuk ke daftar belanja pasar.'
+      );
+      return updated;
     });
   };
 
@@ -331,21 +423,22 @@ function BelanjaContent({ params }: PageProps) {
     showToast('Item titipan dihapus.');
   };
 
-  // Item yang belum dibeli untuk preview pesan WhatsApp
-  const itemsBelumDibeli = useMemo(() => {
-    return displayedItems.filter((item) => !checkedMap[item.kode_tkpi]);
-  }, [displayedItems, checkedMap]);
-
-  // Format teks WhatsApp rapi dan mudah dibaca pedagang atau suami
+  // Format teks WhatsApp rapi dan jelas (membedakan pasar dan kulkas)
   const teksWhatsApp = useMemo(() => {
     let teks = `🛒 *DAFTAR BELANJA PASAR - PORSI KITA*\n`;
     teks += `Keluarga: *${keluarga?.alias || 'Keluarga Kita'}*\n`;
     teks += `Wilayah / Acuan Pasar: ${keluarga?.wilayah || 'Pasar Tradisional'}\n`;
-    teks += `Periode: ${periodeFilter === 'hari_ini' ? 'Menu Hari Ini' : periodeFilter === '3_hari' ? 'Menu 3 Hari' : 'Menu 1 Minggu Penuh'}\n`;
+    teks += `Periode Belanja: *${
+      periodeFilter === 'hari_ini'
+        ? 'Menu 1 Hari (Hari Ini)'
+        : periodeFilter === '3_hari'
+        ? 'Menu 3 Hari'
+        : 'Menu 1 Minggu Penuh (7 Hari)'
+    }*\n`;
     teks += `------------------------------------\n\n`;
 
     if (itemsBelumDibeli.length === 0 && titipanList.length === 0) {
-      teks += `Alhamdulillah, semua bahan belanjaan telah selesai dibeli! ✅\n`;
+      teks += `Alhamdulillah, semua bahan belanjaan pasar telah selesai dibeli! ✅\n`;
     } else {
       const map = new Map<string, ItemDaftarBelanja[]>();
       for (const item of itemsBelumDibeli) {
@@ -354,34 +447,58 @@ function BelanjaContent({ params }: PageProps) {
         map.set(item.kategori, list);
       }
 
+      teks += `📍 *BAHAN HARUS DIBELI DI PASAR:*\n`;
       for (const [kategori, list] of map.entries()) {
         const icon = getKategoriIcon(kategori);
-        teks += `${icon} *LAPAK ${kategori.toUpperCase()}*\n`;
+        teks += `${icon} *Lapak ${kategori.toUpperCase()}*\n`;
         list.forEach((i) => {
           const berat =
             i.kebutuhan_beli_gram >= 1000
               ? `${(i.kebutuhan_beli_gram / 1000).toFixed(1)} kg`
-              : `${i.kebutuhan_beli_gram} gram`;
+              : `${i.kebutuhan_beli_gram}g`;
           teks += `◻ ${i.nama_bahan}: ${berat} (~Rp ${i.estimasi_biaya_rp.toLocaleString('id-ID')})\n`;
         });
         teks += `\n`;
       }
 
       if (titipanList.length > 0) {
-        teks += `📝 *TITIPAN TAMBAHAN*\n`;
+        teks += `📝 *TITIPAN TAMBAHAN:*\n`;
         titipanList.forEach((t) => {
           teks += `◻ ${t.nama} (~Rp ${t.estimasiRp.toLocaleString('id-ID')})\n`;
         });
         teks += `\n`;
       }
 
+      if (itemsDiKulkas.length > 0) {
+        teks += `🧊 *STOK SUDAH ADA DI KULKAS (TIDAK PERLU BELI):*\n`;
+        itemsDiKulkas.forEach((k) => {
+          teks += `✓ ${k.nama_bahan} (Hemat Rp ${k.estimasi_biaya_rp.toLocaleString('id-ID')})\n`;
+        });
+        teks += `\n`;
+      }
+
       teks += `------------------------------------\n`;
-      teks += `*Total Estimasi Sisa Belanja: Rp ${totalSisaKebutuhan.toLocaleString('id-ID')}*\n\n`;
+      teks += `*Total Kebutuhan Bahan Menu: Rp ${totalBiayaSemuaBahan.toLocaleString('id-ID')}*\n`;
+      if (totalHematKulkas > 0) {
+        teks += `*Hemat dari Stok Kulkas: -Rp ${totalHematKulkas.toLocaleString('id-ID')}*\n`;
+      }
+      teks += `*Total Biaya Belanja Pasar: Rp ${totalBiayaBelanjaPasar.toLocaleString('id-ID')}*\n`;
+      teks += `*Sisa yang Belum Dicentang: Rp ${totalSisaKebutuhan.toLocaleString('id-ID')}*\n\n`;
       teks += `_Disusun otomatis oleh Porsi Kita (gizi seimbang, hemat terukur)._`;
     }
 
     return teks;
-  }, [itemsBelumDibeli, titipanList, totalSisaKebutuhan, keluarga, periodeFilter]);
+  }, [
+    itemsBelumDibeli,
+    itemsDiKulkas,
+    titipanList,
+    totalBiayaSemuaBahan,
+    totalHematKulkas,
+    totalBiayaBelanjaPasar,
+    totalSisaKebutuhan,
+    keluarga,
+    periodeFilter,
+  ]);
 
   const handleCopyWhatsApp = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -395,19 +512,26 @@ function BelanjaContent({ params }: PageProps) {
   // Konfirmasi selesai belanja & simpan pengeluaran nyata ke database PostgreSQL
   const handleConfirmFinish = async () => {
     if (totalSudahDibeli <= 0) {
-      alert('Silakan centang minimal satu bahan yang telah dibeli.');
+      alert('Silakan centang minimal satu bahan belanjaan yang telah dibeli.');
       return;
     }
 
     setIsSubmittingFinish(true);
     try {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {}
+
       const res = await fetch('/api/family/transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jenis: 'PENGELUARAN',
           nominal: totalSudahDibeli,
-          catatan: finishCatatan || 'Belanja bahan segar mingguan di pasar tradisional',
+          catatan: finishCatatan || `Belanja bahan dapur pasar (${periodeFilter.replace('_', ' ')})`,
+          phone: meta?.phone,
         }),
       });
 
@@ -419,14 +543,14 @@ function BelanjaContent({ params }: PageProps) {
       showToast(`Pengeluaran sebesar Rp ${totalSudahDibeli.toLocaleString('id-ID')} berhasil dicatat ke Dompet!`);
       setTimeout(() => {
         router.push('/dompet');
-      }, 1200);
+      }, 1000);
     } catch (err) {
       console.error('Error saat menyimpan transaksi:', err);
       setShowFinishModal(false);
       showToast('Pengeluaran dicatat untuk sesi ini.');
       setTimeout(() => {
         router.push('/dompet');
-      }, 1200);
+      }, 1000);
     } finally {
       setIsSubmittingFinish(false);
     }
@@ -435,23 +559,23 @@ function BelanjaContent({ params }: PageProps) {
   // Tampilan Loading
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-6 text-center text-stone-500">
+      <div className="min-h-screen bg-[#fff8f7] flex items-center justify-center p-6 text-center text-[#737a65]">
         <div className="flex flex-col items-center gap-3">
-          <svg className="w-8 h-8 animate-spin text-[#0C4B20]" fill="none" viewBox="0 0 24 24">
+          <svg className="w-8 h-8 animate-spin text-[#306a3b]" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span className="font-bold text-sm text-[#0D0101]">Menyiapkan daftar belanja pasar keluarga...</span>
-          <span className="text-xs text-stone-500">Mengkalkulasi kebutuhan bahan &amp; faktor BDD</span>
+          <span className="font-bold text-sm text-[#2c1514]">Menyiapkan daftar belanja pasar keluarga...</span>
+          <span className="text-xs text-[#737a65]">Mengkonsolidasikan resep menu &amp; faktor BDD Kemenkes</span>
         </div>
       </div>
     );
   }
 
   // Tampilan Kosong Jika Belum Ada Menu Aktif
-  if (!rencanaMenu || daftarBelanja.length === 0) {
+  if (!rencanaMenu || !rencanaMenu.hari || rencanaMenu.hari.length === 0) {
     return (
-      <div className="bg-[#FAFAFA] min-h-screen text-[#0D0101] flex flex-col justify-between">
+      <div className="bg-[#fff8f7] min-h-screen text-[#2c1514] flex flex-col justify-between font-sans">
         <Sidebar
           activePath="daftar-belanja"
           mobileOpen={mobileSidebarOpen}
@@ -459,27 +583,23 @@ function BelanjaContent({ params }: PageProps) {
           anggotaCount={anggotaList.length}
         />
         <main className="lg:pl-64 flex-1 flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-stone-200 shadow-sm text-center flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-[#F2F9EC] text-[#0C4B20] text-3xl flex items-center justify-center shadow-xs">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-stone-200/80 shadow-sm text-center flex flex-col items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-[#fff0ef] text-[#306a3b] text-3xl flex items-center justify-center shadow-2xs">
               🧺
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-[#0D0101] tracking-tight">
-                Belum Ada Menu Masak Aktif
+              <h2 className="text-xl font-extrabold text-[#2c1514] tracking-tight">
+                Belum Ada Menu 7 Hari yang Dihasilkan
               </h2>
-              <p className="text-stone-600 text-sm mt-1.5 leading-relaxed">
-                Daftar belanja pasar dihitung secara otomatis dari jadwal menu 7 hari keluarga Anda, disesuaikan dengan kebutuhan gizi AKG dan batas anggaran.
+              <p className="text-[#5e5e5f] text-sm mt-1.5 leading-relaxed">
+                Daftar belanja pasar disusun otomatis dari menu 7 hari keluarga Anda, disesuaikan dengan kebutuhan gizi anggota dan batas anggaran bulanan.
               </p>
             </div>
             <Link
               href="/menu"
-              style={{
-                background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
-                boxShadow: '0 4px 14px rgba(109, 160, 3, 0.28)',
-              }}
-              className="min-h-[48px] px-6 py-2.5 rounded-xl text-white font-bold text-sm flex items-center justify-center transition hover:brightness-105 cursor-pointer shadow-sm mt-2"
+              className="min-h-[48px] px-6 py-3 rounded-full bg-[#6da003] hover:bg-[#466800] text-white font-bold text-sm flex items-center justify-center transition-colors cursor-pointer shadow-sm mt-2"
             >
-              Susun Menu 7 Hari Sekarang →
+              Generate Menu 7 Hari Sekarang →
             </Link>
           </div>
         </main>
@@ -488,7 +608,7 @@ function BelanjaContent({ params }: PageProps) {
   }
 
   return (
-    <div className="bg-[#FAFAFA] font-sans text-[#0D0101] min-h-screen selection:bg-[#6DA003]/30">
+    <div className="bg-[#fff8f7] font-sans text-[#2c1514] min-h-screen">
       {/* 1. ASIDE SIDEBAR */}
       <Sidebar
         activePath="daftar-belanja"
@@ -500,50 +620,50 @@ function BelanjaContent({ params }: PageProps) {
 
       {/* 2. TOP HEADER */}
       {/* Mobile Top Header */}
-      <header className="lg:hidden sticky top-0 bg-white/95 backdrop-blur-md border-b border-stone-200 px-4 h-16 z-40 flex items-center justify-between">
+      <header className="lg:hidden sticky top-0 bg-white/95 backdrop-blur-md border-b border-[#c3c9b2]/30 px-4 h-16 z-40 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(true)}
-            className="p-2 -ml-1 rounded-xl text-stone-700 hover:bg-stone-100 transition cursor-pointer"
+            className="p-2 -ml-1 rounded-xl text-[#2c1514] hover:bg-stone-100 transition cursor-pointer"
             aria-label="Buka navigasi"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="font-extrabold text-[17px] text-[#0C4B20] tracking-tight">PORSI KITA</span>
+          <span className="font-extrabold text-[17px] text-[#306a3b] tracking-tight">PORSI KITA</span>
         </div>
         <Link
           href="/menu"
-          className="text-xs font-bold text-[#0C4B20] bg-[#F2F9EC] border border-[#6DA003]/30 px-3 py-1.5 rounded-full hover:bg-[#EAF5D8] transition"
+          className="text-xs font-bold text-[#306a3b] bg-[#fff0ef] border border-[#306a3b]/20 px-3 py-1.5 rounded-full hover:bg-[#ffe2df] transition"
         >
           Lihat Menu
         </Link>
       </header>
 
       {/* Desktop Fixed Header */}
-      <header className="hidden lg:flex fixed top-0 left-64 right-0 h-16 bg-white/95 backdrop-blur-xl border-b border-stone-200/80 z-40 items-center justify-between px-8 shadow-2xs">
+      <header className="hidden lg:flex fixed top-0 left-64 right-0 h-16 bg-[#fff8f7]/90 backdrop-blur-xl border-b border-[#c3c9b2]/30 z-40 items-center justify-between px-8 shadow-2xs">
         <div className="flex items-center gap-2.5">
-          <span className="text-[14px] font-extrabold text-[#0D0101] tracking-tight">
+          <span className="text-[14px] font-extrabold text-[#2c1514] tracking-tight">
             Daftar Belanja Pasar
           </span>
           <span className="text-stone-300 text-[13px]">•</span>
-          <span className="text-stone-600 text-[13px] font-medium">
-            {keluarga?.alias || 'Keluarga Kita'} (7 Hari Menu Harmonis)
+          <span className="text-[#737a65] text-[13px] font-medium">
+            {keluarga?.alias || 'Keluarga Kita'} (Tersinkron Resep Menu 7 Hari)
           </span>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
-            <div className="text-[13px] font-bold text-[#0D0101] leading-tight">
+            <div className="text-[13px] font-bold text-[#2c1514] leading-tight">
               {keluarga?.alias || 'Ibu Rumah Tangga'}
             </div>
-            <div className="text-[11px] text-[#0C4B20] font-semibold leading-tight mt-0.5">
+            <div className="text-[11px] text-[#306a3b] font-semibold leading-tight mt-0.5">
               {keluarga?.wilayah || 'Pasar Tradisional'}
             </div>
           </div>
-          <div className="w-9 h-9 rounded-full bg-[#0C4B20] text-white flex items-center justify-center text-[13px] font-bold shadow-xs">
+          <div className="w-9 h-9 rounded-full bg-[#466800] text-white flex items-center justify-center text-[13px] font-bold shadow-xs">
             {keluarga?.alias?.charAt(0) || 'P'}
           </div>
         </div>
@@ -556,9 +676,9 @@ function BelanjaContent({ params }: PageProps) {
 
             {/* Toast Notification Alert */}
             {toastMsg && (
-              <div className="p-3 rounded-2xl bg-[#0C4B20] text-white text-xs font-bold shadow-md transition flex items-center justify-between animate-fadeIn">
+              <div className="p-3.5 rounded-2xl bg-[#306a3b] text-white text-xs font-bold shadow-md transition flex items-center justify-between animate-fadeIn">
                 <div className="flex items-center gap-2">
-                  <span className="text-[#A5E342]">✓</span>
+                  <span className="text-[#b2f2b6]">✓</span>
                   <span>{toastMsg}</span>
                 </div>
                 <button
@@ -574,54 +694,98 @@ function BelanjaContent({ params }: PageProps) {
             {/* Page Header Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0D0101] tracking-tight">
-                  Daftar Belanja Pasar
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-xs font-semibold mb-1">
+                  <span>🥬 Sesuai Resep Menu 7 Hari</span>
+                  <span>•</span>
+                  <span>Faktor BDD Kemenkes</span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2c1514] tracking-tight">
+                  Daftar Belanja Pasar Keluarga
                 </h1>
-                <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
-                  Kebutuhan bahan riil dikonsolidasi dari menu 7 hari dan faktor BDD Kemenkes.
+                <p className="text-xs sm:text-sm text-[#5e5e5f] mt-0.5">
+                  Kebutuhan bahan pangan dihitung otomatis dari resep menu masak 7 hari, dengan fitur penghematan stok kulkas.
                 </p>
               </div>
 
-              <Link
-                href="/menu"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0C4B20] hover:text-[#6DA003] self-start sm:self-auto transition py-2 px-3.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-50 shadow-2xs"
-              >
-                <span>← Kembali ke Menu</span>
-              </Link>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <Link
+                  href="/menu"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#306a3b] hover:text-[#466800] transition py-2 px-3.5 rounded-xl bg-white border border-stone-200 hover:bg-[#fff0ef] shadow-2xs"
+                >
+                  <span>← Lihat Jadwal Menu</span>
+                </Link>
+                <Link
+                  href="/dompet"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2c1514] hover:text-[#306a3b] transition py-2 px-3.5 rounded-xl bg-white border border-stone-200 hover:bg-[#fff0ef] shadow-2xs"
+                >
+                  <span>Dompet Keuangan →</span>
+                </Link>
+              </div>
             </div>
 
-            {/* HERO BUDGET BANNER CARD */}
-            <div className="rounded-3xl bg-gradient-to-br from-[#0C4B20] via-[#143B1B] to-[#0A2E14] text-white p-5 sm:p-6 shadow-xs relative overflow-hidden border border-[#0C4B20]/20">
+            {/* HERO BUDGET & SAVINGS BANNER CARD */}
+            <div className="rounded-3xl bg-[#306a3b] text-white p-5 sm:p-7 shadow-md relative overflow-hidden border border-[#306a3b]">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
-                <div className="flex flex-col gap-2 max-w-xl">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-[#A5E342] text-[11px] font-extrabold w-fit">
-                    <span>ESTIMASI BELANJA ({periodeFilter === 'hari_ini' ? 'HARI INI' : periodeFilter === '3_hari' ? '3 HARI' : '1 MINGGU'})</span>
-                  </div>
-
-                  <div className="flex items-baseline gap-3 flex-wrap">
-                    <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white tabular-nums">
-                      Rp {totalBiayaEstimasi.toLocaleString('id-ID')}
-                    </div>
-                    <span className="text-xs text-white/70">
-                      Batas anggaran: Rp {batasAmanRp.toLocaleString('id-ID')}
+                <div className="flex flex-col gap-2.5 max-w-xl">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-[#b2f2b6] text-[11px] font-bold w-fit">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>
+                      BELANJA {periodeFilter === 'hari_ini' ? '1 HARI (HARI INI)' : periodeFilter === '3_hari' ? '3 HARI PERTAMA' : '1 MINGGU (7 HARI PENUH)'}
                     </span>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="w-full bg-white/15 rounded-full h-2.5 overflow-hidden my-0.5">
+                  {/* Main Amount & Limit */}
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white font-mono">
+                      Rp {totalBiayaBelanjaPasar.toLocaleString('id-ID')}
+                    </div>
+                    <span className="text-xs text-white/80 font-medium">
+                      Batas Anggaran: Rp {batasAmanRp.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  {/* Kulkas Savings Highlight Box */}
+                  {totalHematKulkas > 0 ? (
+                    <div className="bg-white/15 backdrop-blur-xs rounded-2xl px-4 py-2.5 border border-white/20 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">🧊</span>
+                        <div>
+                          <span className="font-bold text-[#b2f2b6]">Hemat Rp {totalHematKulkas.toLocaleString('id-ID')}</span>
+                          <span className="text-white/80 ml-1">
+                            ({jumlahBahanKulkas} bahan sudah ada di kulkas, tidak perlu beli)
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[11px] bg-[#6da003] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-white">
+                        Hemat Aktif
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="bg-white/10 rounded-2xl px-4 py-2 text-xs text-white/80 flex items-center gap-2">
+                      <span>💡</span>
+                      <span>
+                        Punya stok bumbu atau bahan di kulkas? Tandai tombol <strong>&quot;+ Kulkas&quot;</strong> agar anggaran belanja lebih hemat.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Progress Bar Belanja */}
+                  <div className="w-full bg-white/20 rounded-full h-2.5 overflow-hidden my-0.5">
                     <div
-                      className="bg-[#A5E342] h-full rounded-full transition-all duration-500"
+                      className="bg-[#6da003] h-full rounded-full transition-all duration-500"
                       style={{ width: `${persentaseDibeli}%` }}
                     />
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-white/90 flex-wrap">
                     <span>
-                      Dicentang: <strong className="text-white font-bold">Rp {totalSudahDibeli.toLocaleString('id-ID')}</strong> ({persentaseDibeli}%)
+                      Dicentang: <strong className="text-white font-bold font-mono">Rp {totalSudahDibeli.toLocaleString('id-ID')}</strong> ({persentaseDibeli}%)
                     </span>
                     <span className="text-white/40">•</span>
                     <span>
-                      Sisa: <strong className="text-[#A5E342] font-bold">Rp {totalSisaKebutuhan.toLocaleString('id-ID')}</strong>
+                      Sisa Belanja: <strong className="text-[#b2f2b6] font-bold font-mono">Rp {totalSisaKebutuhan.toLocaleString('id-ID')}</strong>
                     </span>
                   </div>
                 </div>
@@ -632,16 +796,12 @@ function BelanjaContent({ params }: PageProps) {
                     href={`https://wa.me/?text=${encodeURIComponent(teksWhatsApp)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{
-                      background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
-                      boxShadow: '0 4px 14px rgba(109, 160, 3, 0.28)',
-                    }}
-                    className="min-h-[44px] px-5 py-2 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 hover:brightness-105 active:scale-98 transition shadow-xs cursor-pointer flex-1 sm:flex-initial"
+                    className="min-h-[48px] px-5 py-2.5 rounded-full bg-[#6da003] hover:bg-[#466800] text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer flex-1 sm:flex-initial"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                     </svg>
-                    <span>Kirim ke WA</span>
+                    <span>Kirim ke WhatsApp</span>
                   </a>
 
                   <button
@@ -653,31 +813,122 @@ function BelanjaContent({ params }: PageProps) {
                       }
                       setShowFinishModal(true);
                     }}
-                    className="min-h-[44px] px-5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 border border-white/20 flex-1 sm:flex-initial"
+                    className="min-h-[48px] px-5 py-2.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer border border-white/20 flex-1 sm:flex-initial"
                   >
-                    <svg className="w-4 h-4 text-[#A5E342]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-4 h-4 text-[#b2f2b6]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>Selesai Belanja</span>
+                    <span>Selesai &amp; Catat Dompet</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* CONTROL BAR: PENCARIAN & FILTER TERPADU */}
-            <div className="bg-white rounded-2xl p-3.5 sm:p-4 shadow-2xs border border-stone-200/80 flex flex-col gap-3">
-              {/* Row 1: Search & Toggle Kulkas */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+            {/* EXPANDABLE MENU RECIPES IN THIS PERIOD */}
+            <div className="bg-white rounded-2xl p-4 shadow-2xs border border-stone-200/80">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🍳</span>
+                  <span className="text-xs sm:text-sm font-bold text-[#2c1514]">
+                    Menu Masakan dalam Periode Ini ({resepDalamPeriode.length} Hidangan)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRecipeList(!showRecipeList)}
+                  className="text-xs font-bold text-[#306a3b] hover:text-[#466800] py-1 px-2.5 rounded-lg bg-[#fff0ef] transition cursor-pointer"
+                >
+                  {showRecipeList ? 'Sembunyikan ▲' : 'Lihat Resep ▼'}
+                </button>
+              </div>
+
+              {showRecipeList && (
+                <div className="pt-3 mt-3 border-t border-stone-100 flex flex-wrap gap-2 animate-fadeIn">
+                  {resepDalamPeriode.map((r) => (
+                    <span
+                      key={r.kode}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#fff0ef] text-[#2c1514] border border-stone-200/60"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#6da003]" />
+                      {r.nama}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* CONTROL BAR: FILTER PERIODE, KULKAS, STATUS & PENCARIAN */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-2xs border border-stone-200/80 flex flex-col gap-3.5">
+              {/* Row 1: Segmented Control Periode Belanja (1 Minggu / 3 Hari / 1 Hari) */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <label className="text-[12px] font-bold text-[#737a65]">
+                    Pilih Kebutuhan Belanja:
+                  </label>
+                  <div className="flex items-center gap-1 p-1 bg-[#fff0ef] rounded-2xl border border-stone-200/60">
+                    <button
+                      type="button"
+                      onClick={() => setPeriodeFilter('1_minggu')}
+                      className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-[13px] font-bold transition-all cursor-pointer ${
+                        periodeFilter === '1_minggu'
+                          ? 'bg-[#306a3b] text-white shadow-xs'
+                          : 'text-[#737a65] hover:text-[#2c1514]'
+                      }`}
+                    >
+                      1 Minggu (7 Hari)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodeFilter('3_hari')}
+                      className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-[13px] font-bold transition-all cursor-pointer ${
+                        periodeFilter === '3_hari'
+                          ? 'bg-[#306a3b] text-white shadow-xs'
+                          : 'text-[#737a65] hover:text-[#2c1514]'
+                      }`}
+                    >
+                      3 Hari
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodeFilter('hari_ini')}
+                      className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-[13px] font-bold transition-all cursor-pointer ${
+                        periodeFilter === 'hari_ini'
+                          ? 'bg-[#306a3b] text-white shadow-xs'
+                          : 'text-[#737a65] hover:text-[#2c1514]'
+                      }`}
+                    >
+                      1 Hari (Hari Ini)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sembunyikan Stok Kulkas Checkbox */}
+                <label className="flex items-center gap-2.5 cursor-pointer select-none px-4 py-2.5 rounded-2xl border border-stone-200/80 bg-[#fff0ef]/60 hover:bg-[#fff0ef] transition min-h-[44px] shrink-0 self-start sm:self-end">
+                  <input
+                    type="checkbox"
+                    checked={hideFridge}
+                    onChange={(e) => setHideFridge(e.target.checked)}
+                    className="w-4 h-4 text-[#306a3b] rounded focus:ring-[#306a3b] border-stone-300"
+                  />
+                  <span className="text-xs font-bold text-[#2c1514]">
+                    Sembunyikan Bahan Kulkas ({jumlahBahanKulkas})
+                  </span>
+                </label>
+              </div>
+
+              {/* Row 2: Search & Status Filter */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-stone-100">
+                {/* Search Bar */}
                 <div className="relative flex-1">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari nama bahan masakan atau lapak pasar..."
-                    className="w-full pl-9 pr-8 py-2 rounded-xl bg-stone-50 border border-stone-200 text-xs font-medium text-[#0D0101] placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#0C4B20] focus:bg-white transition"
+                    placeholder="Cari bahan masakan atau nama lapak..."
+                    className="w-full min-h-[44px] pl-10 pr-8 py-2 rounded-2xl bg-[#fff0ef] text-xs font-semibold text-[#2c1514] placeholder:text-[#737a65] focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
                   />
                   <svg
-                    className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    className="w-4 h-4 text-[#737a65] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -689,74 +940,22 @@ function BelanjaContent({ params }: PageProps) {
                     <button
                       type="button"
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs px-1"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs px-1"
                     >
                       ✕
                     </button>
                   )}
                 </div>
 
-                <label className="flex items-center gap-2 cursor-pointer select-none px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 transition min-h-[38px] shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={hideFridge}
-                    onChange={(e) => setHideFridge(e.target.checked)}
-                    className="w-4 h-4 text-[#0C4B20] rounded focus:ring-[#0C4B20] border-stone-300"
-                  />
-                  <span className="text-xs font-semibold text-stone-700">
-                    Sembunyikan Stok Kulkas ({fridgeCount})
-                  </span>
-                </label>
-              </div>
-
-              {/* Row 2: Periode & Status Filters */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-stone-100">
-                {/* Periode filter */}
-                <div className="flex items-center gap-1 p-0.5 bg-stone-100 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setPeriodeFilter('1_minggu')}
-                    className={`min-h-[32px] px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      periodeFilter === '1_minggu'
-                        ? 'bg-white text-[#0C4B20] shadow-2xs'
-                        : 'text-stone-600 hover:text-[#0D0101]'
-                    }`}
-                  >
-                    1 Minggu
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPeriodeFilter('3_hari')}
-                    className={`min-h-[32px] px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      periodeFilter === '3_hari'
-                        ? 'bg-white text-[#0C4B20] shadow-2xs'
-                        : 'text-stone-600 hover:text-[#0D0101]'
-                    }`}
-                  >
-                    3 Hari
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPeriodeFilter('hari_ini')}
-                    className={`min-h-[32px] px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      periodeFilter === 'hari_ini'
-                        ? 'bg-white text-[#0C4B20] shadow-2xs'
-                        : 'text-stone-600 hover:text-[#0D0101]'
-                    }`}
-                  >
-                    Hari Ini
-                  </button>
-                </div>
-
-                {/* Status filter */}
-                <div className="flex items-center gap-1">
+                {/* Status Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setStatusFilter('semua')}
-                    className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       statusFilter === 'semua'
-                        ? 'bg-[#0C4B20] text-white shadow-2xs'
-                        : 'text-stone-600 hover:bg-stone-100'
+                        ? 'bg-[#306a3b] text-white shadow-2xs'
+                        : 'bg-[#fff0ef] text-[#737a65] hover:text-[#2c1514]'
                     }`}
                   >
                     Semua ({daftarBelanja.length})
@@ -764,21 +963,32 @@ function BelanjaContent({ params }: PageProps) {
                   <button
                     type="button"
                     onClick={() => setStatusFilter('belum_dibeli')}
-                    className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       statusFilter === 'belum_dibeli'
-                        ? 'bg-[#6DA003] text-white shadow-2xs'
-                        : 'text-stone-600 hover:bg-stone-100'
+                        ? 'bg-[#6da003] text-white shadow-2xs'
+                        : 'bg-[#fff0ef] text-[#737a65] hover:text-[#2c1514]'
                     }`}
                   >
-                    Belum Dibeli ({itemsBelumDibeli.length})
+                    Perlu Beli ({itemsBelumDibeli.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('kulkas')}
+                    className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      statusFilter === 'kulkas'
+                        ? 'bg-[#306a3b] text-white shadow-2xs'
+                        : 'bg-[#fff0ef] text-[#737a65] hover:text-[#2c1514]'
+                    }`}
+                  >
+                    Di Kulkas ({jumlahBahanKulkas})
                   </button>
                   <button
                     type="button"
                     onClick={() => setStatusFilter('sudah_dibeli')}
-                    className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       statusFilter === 'sudah_dibeli'
-                        ? 'bg-[#0C4B20] text-white shadow-2xs'
-                        : 'text-stone-600 hover:bg-stone-100'
+                        ? 'bg-[#306a3b] text-white shadow-2xs'
+                        : 'bg-[#fff0ef] text-[#737a65] hover:text-[#2c1514]'
                     }`}
                   >
                     Sudah Dibeli
@@ -793,11 +1003,11 @@ function BelanjaContent({ params }: PageProps) {
               {/* LEFT COLUMN: Kelompok Lapak Pasar (8 Kolom) */}
               <div className="lg:col-span-8 flex flex-col gap-4">
                 {perKategori.length === 0 ? (
-                  <div className="bg-white rounded-3xl p-8 text-center text-stone-500 border border-stone-200 shadow-2xs flex flex-col items-center gap-3">
+                  <div className="bg-white rounded-3xl p-8 text-center text-[#737a65] border border-stone-200 shadow-2xs flex flex-col items-center gap-3">
                     <span className="text-3xl">🥦</span>
-                    <span className="font-bold text-stone-800 text-sm">Tidak ada bahan belanjaan pada filter ini</span>
-                    <p className="text-xs text-stone-500 max-w-sm">
-                      Seluruh bahan mungkin telah dicentang sebagai sudah dibeli, ada di stok kulkas, atau kata kunci pencarian tidak cocok.
+                    <span className="font-bold text-[#2c1514] text-sm">Tidak ada bahan belanjaan pada filter ini</span>
+                    <p className="text-xs text-[#737a65] max-w-sm">
+                      Seluruh bahan mungkin telah ditandai ada di stok kulkas, sudah dibeli, atau kata kunci pencarian tidak cocok.
                     </p>
                     <button
                       type="button"
@@ -806,7 +1016,7 @@ function BelanjaContent({ params }: PageProps) {
                         setHideFridge(false);
                         setSearchQuery('');
                       }}
-                      className="min-h-[40px] px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-xs font-bold text-[#0C4B20] transition mt-1 cursor-pointer"
+                      className="min-h-[44px] px-5 py-2 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-xs font-bold text-[#306a3b] transition mt-1 cursor-pointer"
                     >
                       Reset Filter Belanja
                     </button>
@@ -814,43 +1024,48 @@ function BelanjaContent({ params }: PageProps) {
                 ) : (
                   perKategori.map(([kategori, items]) => {
                     const subtotalKategori = items.reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
-                    const isAllChecked = items.every((it) => checkedMap[it.kode_tkpi]);
+                    const nonFridgeInKategori = items.filter((it) => !fridgeMap[it.kode_tkpi]);
+                    const isAllChecked =
+                      nonFridgeInKategori.length > 0 &&
+                      nonFridgeInKategori.every((it) => checkedMap[it.kode_tkpi]);
 
                     return (
                       <div
                         key={kategori}
-                        className="bg-white rounded-2xl p-4 sm:p-5 shadow-2xs border border-stone-200/80 flex flex-col gap-3"
+                        className="bg-white rounded-3xl p-4 sm:p-5 shadow-2xs border border-stone-200/80 flex flex-col gap-3"
                       >
                         {/* Lapak Header Bar */}
                         <div className="flex items-center justify-between gap-2.5 pb-2.5 border-b border-stone-100">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-[#F2F9EC] flex items-center justify-center text-lg shrink-0 shadow-2xs">
+                            <div className="w-9 h-9 rounded-2xl bg-[#fff0ef] flex items-center justify-center text-lg shrink-0 shadow-2xs">
                               {getKategoriIcon(kategori)}
                             </div>
                             <div>
-                              <h2 className="text-sm sm:text-[15px] font-extrabold text-[#0D0101] leading-tight">
+                              <h2 className="text-sm sm:text-[15px] font-extrabold text-[#2c1514] leading-tight">
                                 Lapak {kategori}
                               </h2>
-                              <span className="text-[11px] text-stone-500 font-medium">
-                                {items.length} Bahan • Subtotal: <strong className="text-[#0C4B20]">Rp {subtotalKategori.toLocaleString('id-ID')}</strong>
+                              <span className="text-[11px] text-[#737a65] font-medium">
+                                {items.length} Bahan • Subtotal: <strong className="text-[#306a3b] font-mono">Rp {subtotalKategori.toLocaleString('id-ID')}</strong>
                               </span>
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => toggleKategoriAll(items)}
-                            className="text-[11px] font-bold text-[#0C4B20] hover:text-[#6DA003] px-3 py-1 rounded-lg bg-stone-50 hover:bg-stone-100 border border-stone-200 transition cursor-pointer min-h-[32px]"
-                          >
-                            {isAllChecked ? 'Batalkan' : 'Selesai Lapak ✓'}
-                          </button>
+                          {nonFridgeInKategori.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleKategoriAll(items)}
+                              className="text-[11px] font-bold text-[#306a3b] hover:text-[#466800] px-3.5 py-1.5 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] transition cursor-pointer min-h-[36px]"
+                            >
+                              {isAllChecked ? 'Batalkan Centang' : 'Centang Semua Lapak ✓'}
+                            </button>
+                          )}
                         </div>
 
                         {/* Items List di Lapak Terkait */}
                         <div className="flex flex-col gap-2">
                           {items.map((item) => {
-                            const isChecked = !!checkedMap[item.kode_tkpi];
                             const inFridge = !!fridgeMap[item.kode_tkpi];
+                            const isChecked = !!checkedMap[item.kode_tkpi];
                             const displayGram =
                               item.kebutuhan_beli_gram >= 1000
                                 ? `${(item.kebutuhan_beli_gram / 1000).toFixed(1)} kg`
@@ -859,37 +1074,60 @@ function BelanjaContent({ params }: PageProps) {
                             return (
                               <div
                                 key={item.kode_tkpi}
-                                onClick={() => toggleCheck(item.kode_tkpi)}
-                                className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none gap-3 ${
-                                  isChecked
-                                    ? 'bg-stone-50/60 border-stone-200 opacity-60'
-                                    : 'bg-white border-stone-200/90 hover:border-[#0C4B20]/40 hover:bg-stone-50/40'
+                                onClick={() => {
+                                  if (!inFridge) toggleCheck(item.kode_tkpi);
+                                }}
+                                className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all select-none gap-3 ${
+                                  inFridge
+                                    ? 'bg-[#f4fbf4] border-[#b2f2b6] opacity-90'
+                                    : isChecked
+                                    ? 'bg-stone-50/70 border-stone-200 opacity-60 cursor-pointer'
+                                    : 'bg-white border-stone-200/90 hover:border-[#306a3b]/40 hover:bg-[#fff0ef]/30 cursor-pointer'
                                 }`}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
-                                  {/* Checkbox */}
-                                  <div
-                                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
-                                      isChecked
-                                        ? 'bg-[#6DA003] text-white shadow-2xs'
-                                        : 'border border-stone-300 bg-stone-50 text-transparent'
-                                    }`}
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  </div>
-
-                                  <div className="flex flex-col min-w-0">
-                                    <span
-                                      className={`text-xs sm:text-sm font-bold truncate ${
-                                        isChecked ? 'line-through text-stone-400' : 'text-[#0D0101]'
+                                  {/* Checkbox (hanya aktif jika tidak ada di kulkas) */}
+                                  {!inFridge ? (
+                                    <div
+                                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 ${
+                                        isChecked
+                                          ? 'bg-[#6da003] text-white shadow-2xs'
+                                          : 'border-2 border-stone-300 bg-white text-transparent'
                                       }`}
                                     >
-                                      {item.nama_bahan}
-                                    </span>
-                                    <div className="flex items-center gap-1.5 text-[11px] text-stone-500 mt-0.5">
-                                      <span className="font-semibold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded">
+                                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </div>
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-lg bg-[#b2f2b6] text-[#367041] flex items-center justify-center shrink-0 text-xs">
+                                      🧊
+                                    </div>
+                                  )}
+
+                                  <div className="flex flex-col min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span
+                                        className={`text-xs sm:text-sm font-bold truncate ${
+                                          inFridge
+                                            ? 'text-[#2c1514]'
+                                            : isChecked
+                                            ? 'line-through text-stone-400'
+                                            : 'text-[#2c1514]'
+                                        }`}
+                                      >
+                                        {item.nama_bahan}
+                                      </span>
+
+                                      {inFridge && (
+                                        <span className="px-2 py-0.5 rounded-full bg-[#b2f2b6] text-[#2c1514] text-[10px] font-bold">
+                                          Ada di Kulkas (Hemat)
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 text-[11px] text-[#737a65] mt-0.5">
+                                      <span className="font-semibold text-[#2c1514] bg-[#fff0ef] px-1.5 py-0.5 rounded-md">
                                         {displayGram}
                                       </span>
                                       <span>•</span>
@@ -901,37 +1139,50 @@ function BelanjaContent({ params }: PageProps) {
                                 </div>
 
                                 <div className="flex items-center gap-2 shrink-0">
-                                  {/* Tombol Status Kulkas */}
+                                  {/* Tombol Toggle Kulkas (Min 44px) */}
                                   <button
                                     type="button"
                                     onClick={(e) => toggleFridge(e, item.kode_tkpi)}
-                                    className={`text-[11px] font-bold px-2 py-1 rounded-lg transition cursor-pointer ${
+                                    className={`min-h-[40px] px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                                       inFridge
-                                        ? 'bg-[#B2F2B6] text-[#002109] border border-[#6DA003]/40'
-                                        : 'bg-stone-100 text-stone-500 hover:bg-stone-200 border border-stone-200'
+                                        ? 'bg-[#b2f2b6] text-[#367041] border border-[#6da003]/40'
+                                        : 'bg-[#fff0ef] text-[#737a65] hover:text-[#2c1514] hover:bg-[#ffe2df]'
                                     }`}
-                                    title="Tandai ada di kulkas"
+                                    title={inFridge ? 'Klik untuk menghapus dari stok kulkas' : 'Tandai bahan ini sudah ada di kulkas'}
                                   >
-                                    {inFridge ? '🧊 Kulkas' : '+ Kulkas'}
+                                    {inFridge ? '🧊 Di Kulkas' : '+ Kulkas'}
                                   </button>
 
-                                  {/* Nominal Harga */}
-                                  <span
-                                    className={`text-xs sm:text-sm font-extrabold tabular-nums ${
-                                      isChecked ? 'line-through text-stone-400' : 'text-[#0C4B20]'
-                                    }`}
-                                  >
-                                    Rp {item.estimasi_biaya_rp.toLocaleString('id-ID')}
-                                  </span>
+                                  {/* Nominal Biaya */}
+                                  <div className="text-right">
+                                    {inFridge ? (
+                                      <div className="flex flex-col items-end">
+                                        <span className="text-xs sm:text-sm font-extrabold text-[#306a3b] font-mono">
+                                          Hemat Rp {item.estimasi_biaya_rp.toLocaleString('id-ID')}
+                                        </span>
+                                        <span className="text-[10px] text-[#737a65] line-through">
+                                          Rp {item.estimasi_biaya_rp.toLocaleString('id-ID')}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span
+                                        className={`text-xs sm:text-sm font-extrabold tabular-nums font-mono ${
+                                          isChecked ? 'line-through text-stone-400' : 'text-[#306a3b]'
+                                        }`}
+                                      >
+                                        Rp {item.estimasi_biaya_rp.toLocaleString('id-ID')}
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {/* Edit Harga Button */}
                                   <button
                                     type="button"
                                     onClick={(e) => handleOpenEditPrice(e, item)}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition cursor-pointer"
-                                    title="Sesuaikan harga"
+                                    className="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-[#2c1514] hover:bg-stone-100 transition cursor-pointer"
+                                    title="Sesuaikan harga bahan di pasar Anda"
                                   >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                     </svg>
                                   </button>
@@ -946,28 +1197,93 @@ function BelanjaContent({ params }: PageProps) {
                 )}
               </div>
 
-              {/* RIGHT COLUMN: Sidebar Titipan & Berbagi WA (4 Kolom - Sticky) */}
+              {/* RIGHT COLUMN: Rincian Anggaran & Titipan Belanja (4 Kolom - Sticky) */}
               <div className="lg:col-span-4 lg:sticky lg:top-20 flex flex-col gap-4">
 
-                {/* CARD TITIPAN BELANJA & BERBAGI */}
-                <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-2xs border border-stone-200/80 flex flex-col gap-3.5">
+                {/* CARD 1: RINGKASAN ANGGARAN CERDAS */}
+                <div className="bg-white rounded-3xl p-5 shadow-2xs border border-stone-200/80 flex flex-col gap-3.5">
+                  <div className="flex items-center gap-2.5 pb-2.5 border-b border-stone-100">
+                    <div className="w-8 h-8 rounded-xl bg-[#fff0ef] text-[#306a3b] flex items-center justify-center text-base shrink-0">
+                      📊
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-[#2c1514] leading-tight">
+                        Ringkasan Belanja Cerdas
+                      </h3>
+                      <span className="text-[11px] text-[#737a65]">
+                        Kalkulasi hemat menu vs stok rumah
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-[#737a65]">
+                      <span>Total Kebutuhan Menu ({periodeFilter.replace('_', ' ')}):</span>
+                      <span className="font-bold text-[#2c1514] font-mono">
+                        Rp {totalBiayaSemuaBahan.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[#306a3b]">
+                      <span className="font-semibold">Hemat dari Stok Kulkas ({jumlahBahanKulkas} bahan):</span>
+                      <span className="font-bold font-mono">
+                        - Rp {totalHematKulkas.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+
+                    {totalTitipan > 0 && (
+                      <div className="flex items-center justify-between text-[#737a65]">
+                        <span>Titipan Tambahan ({titipanList.length}):</span>
+                        <span className="font-bold text-[#2c1514] font-mono">
+                          + Rp {totalTitipan.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="border-t border-dashed border-stone-200 pt-2 flex items-center justify-between font-bold text-sm text-[#2c1514]">
+                      <span>Biaya Belanja Pasar:</span>
+                      <span className="text-[#306a3b] font-mono">
+                        Rp {totalBiayaBelanjaPasar.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-[#737a65] pt-1">
+                      <span>Sudah dibeli di pasar:</span>
+                      <span className="font-semibold font-mono text-[#306a3b]">
+                        Rp {totalSudahDibeli.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {totalHematKulkas > 0 && (
+                    <div className="p-3 rounded-2xl bg-[#f4fbf4] border border-[#b2f2b6] text-[11px] text-[#367041] flex items-center gap-2">
+                      <span>✓</span>
+                      <span>
+                        Ibu menghemat <strong>Rp {totalHematKulkas.toLocaleString('id-ID')}</strong> karena memanfaatkan bahan yang sudah ada!
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* CARD 2: TITIPAN BELANJA & BERBAGI */}
+                <div className="bg-white rounded-3xl p-5 shadow-2xs border border-stone-200/80 flex flex-col gap-3.5">
                   <div className="flex items-center gap-2.5 pb-2 border-b border-stone-100">
-                    <div className="w-8 h-8 rounded-xl bg-[#F2F9EC] text-[#0C4B20] flex items-center justify-center text-base shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-[#fff0ef] text-[#306a3b] flex items-center justify-center text-base shrink-0">
                       🛍️
                     </div>
                     <div>
-                      <h3 className="text-sm font-extrabold text-[#0D0101] leading-tight">
-                        Titipan &amp; Berbagi Belanja
+                      <h3 className="text-sm font-extrabold text-[#2c1514] leading-tight">
+                        Titipan Tambahan
                       </h3>
-                      <span className="text-[11px] text-stone-500">
-                        Tambah barang titipan dan kirim daftar ke WA
+                      <span className="text-[11px] text-[#737a65]">
+                        Catat barang titipan mendadak saat ke pasar
                       </span>
                     </div>
                   </div>
 
                   {/* Preset Titipan Cepat */}
                   <div>
-                    <span className="text-[11px] font-bold text-stone-500 block mb-1">
+                    <span className="text-[11px] font-bold text-[#737a65] block mb-1">
                       Titipan Populer:
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -976,7 +1292,7 @@ function BelanjaContent({ params }: PageProps) {
                           key={p.nama}
                           type="button"
                           onClick={() => handleAddPresetTitipan(p)}
-                          className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-stone-50 hover:bg-[#F2F9EC] text-stone-700 hover:text-[#0C4B20] border border-stone-200 transition cursor-pointer"
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-[#2c1514] transition cursor-pointer"
                         >
                           + {p.nama}
                         </button>
@@ -986,7 +1302,7 @@ function BelanjaContent({ params }: PageProps) {
 
                   {/* Form Tambah Titipan Kustom */}
                   <form onSubmit={handleAddTitipan} className="flex flex-col gap-1.5 pt-2 border-t border-stone-100">
-                    <label className="text-[11px] font-bold text-stone-700">
+                    <label className="text-[11px] font-bold text-[#737a65]">
                       Tambah Titipan Baru:
                     </label>
                     <div className="flex items-center gap-1.5">
@@ -995,7 +1311,7 @@ function BelanjaContent({ params }: PageProps) {
                         value={titipanNama}
                         onChange={(e) => setTitipanNama(e.target.value)}
                         placeholder="misal: Kerupuk, Tisu"
-                        className="flex-1 px-2.5 py-1.5 rounded-xl bg-stone-50 text-xs font-medium border border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                        className="flex-1 px-3 py-2 rounded-xl bg-[#fff0ef] text-xs font-semibold text-[#2c1514] placeholder:text-[#737a65] focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
                       />
                       <input
                         type="number"
@@ -1003,11 +1319,11 @@ function BelanjaContent({ params }: PageProps) {
                         value={titipanHarga}
                         onChange={(e) => setTitipanHarga(e.target.value)}
                         placeholder="Rp"
-                        className="w-20 px-2 py-1.5 rounded-xl bg-stone-50 text-xs font-medium border border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                        className="w-20 px-3 py-2 rounded-xl bg-[#fff0ef] text-xs font-semibold text-[#2c1514] focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
                       />
                       <button
                         type="submit"
-                        className="w-8 h-8 rounded-xl bg-[#0C4B20] text-white font-bold flex items-center justify-center hover:bg-[#143B1B] transition shrink-0 cursor-pointer text-sm shadow-2xs"
+                        className="w-9 h-9 rounded-xl bg-[#306a3b] text-white font-bold flex items-center justify-center hover:bg-[#155126] transition shrink-0 cursor-pointer text-sm shadow-2xs"
                         title="Tambah titipan"
                       >
                         +
@@ -1017,15 +1333,15 @@ function BelanjaContent({ params }: PageProps) {
 
                   {/* List Titipan yang Ditambahkan */}
                   {titipanList.length > 0 && (
-                    <div className="flex flex-col gap-1 p-2.5 bg-stone-50 rounded-xl border border-stone-200/70">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                    <div className="flex flex-col gap-1 p-2.5 bg-[#fff0ef] rounded-2xl border border-stone-200/60">
+                      <span className="text-[10px] font-bold text-[#737a65] uppercase tracking-wider">
                         Daftar Titipan ({titipanList.length}):
                       </span>
                       {titipanList.map((t) => (
                         <div key={t.id} className="flex items-center justify-between text-xs py-1 border-b border-stone-200/50 last:border-b-0">
-                          <span className="font-semibold text-[#0D0101] truncate">• {t.nama}</span>
+                          <span className="font-semibold text-[#2c1514] truncate">• {t.nama}</span>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[#0C4B20] font-bold text-[11px]">
+                            <span className="text-[#306a3b] font-bold text-[11px] font-mono">
                               Rp {t.estimasiRp.toLocaleString('id-ID')}
                             </span>
                             <button
@@ -1047,9 +1363,9 @@ function BelanjaContent({ params }: PageProps) {
                     <button
                       type="button"
                       onClick={handleCopyWhatsApp}
-                      className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-[#0D0101] transition text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full min-h-[44px] px-3 py-2 rounded-full bg-stone-100 hover:bg-stone-200 text-[#2c1514] transition text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <svg className="w-4 h-4 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="w-4 h-4 text-[#737a65]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
                       <span>{copyStatus === 'copied' ? 'Format WA Tersalin ✓' : 'Salin Format Teks WA'}</span>
@@ -1059,7 +1375,7 @@ function BelanjaContent({ params }: PageProps) {
                       href={`https://wa.me/?text=${encodeURIComponent(teksWhatsApp)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white transition text-xs font-bold flex items-center justify-center gap-2 shadow-2xs"
+                      className="w-full min-h-[44px] px-3 py-2 rounded-full bg-[#25D366] hover:bg-[#20ba59] text-white transition text-xs font-bold flex items-center justify-center gap-2 shadow-2xs"
                     >
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.173.086.275.071.376-.043.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564c.173.087.289.129.332.202.043.073.043.419-.101.824z" />
@@ -1080,9 +1396,9 @@ function BelanjaContent({ params }: PageProps) {
       {/* MODAL 1: SESUAIKAN ESTIMASI HARGA BAHAN */}
       {editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-xl border border-stone-200 animate-scaleIn flex flex-col gap-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-xl border border-stone-200 animate-scaleIn flex flex-col gap-4">
             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <h3 className="text-base font-extrabold text-[#0D0101]">
+              <h3 className="text-base font-extrabold text-[#2c1514]">
                 Sesuaikan Estimasi Harga
               </h3>
               <button
@@ -1096,20 +1412,20 @@ function BelanjaContent({ params }: PageProps) {
 
             <form onSubmit={handleSavePrice} className="flex flex-col gap-3">
               <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
+                <label className="text-xs font-bold text-[#737a65] block mb-1">
                   Nama Bahan Pangan:
                 </label>
-                <div className="text-sm font-bold text-[#0C4B20]">
+                <div className="text-sm font-bold text-[#306a3b]">
                   {editingItem.nama_bahan} ({editingItem.kebutuhan_beli_gram}g)
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
+                <label className="text-xs font-bold text-[#737a65] block mb-1">
                   Harga di Pasar / Warung Langganan (Rp):
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#737a65] font-mono">
                     Rp
                   </span>
                   <input
@@ -1119,7 +1435,7 @@ function BelanjaContent({ params }: PageProps) {
                     value={editPriceInput}
                     onChange={(e) => setEditPriceInput(e.target.value)}
                     required
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                    className="w-full pl-10 pr-4 py-3 rounded-2xl bg-[#fff0ef] border border-stone-200 text-sm font-bold text-[#2c1514] font-mono focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
                   />
                 </div>
               </div>
@@ -1128,16 +1444,13 @@ function BelanjaContent({ params }: PageProps) {
                 <button
                   type="button"
                   onClick={() => setEditingItem(null)}
-                  className="min-h-[44px] px-4 py-2 rounded-xl bg-stone-100 text-stone-700 text-xs font-bold hover:bg-stone-200 cursor-pointer"
+                  className="min-h-[46px] px-5 py-2 rounded-full bg-stone-100 text-[#2c1514] text-xs font-bold hover:bg-stone-200 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  style={{
-                    background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
-                  }}
-                  className="min-h-[44px] px-5 py-2 rounded-xl text-white text-xs font-bold hover:brightness-105 cursor-pointer shadow-sm"
+                  className="min-h-[46px] px-6 py-2 rounded-full bg-[#6da003] hover:bg-[#466800] text-white text-xs font-bold transition-colors cursor-pointer shadow-sm"
                 >
                   Simpan Harga
                 </button>
@@ -1152,37 +1465,37 @@ function BelanjaContent({ params }: PageProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-stone-200 animate-scaleIn flex flex-col gap-4">
             <div className="flex items-center gap-3 pb-3 border-b border-stone-100">
-              <div className="w-10 h-10 rounded-2xl bg-[#F2F9EC] text-[#0C4B20] text-xl flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-[#fff0ef] text-[#306a3b] text-xl flex items-center justify-center shrink-0">
                 💰
               </div>
               <div>
-                <h3 className="text-[17px] font-extrabold text-[#0D0101] leading-tight">
+                <h3 className="text-[17px] font-extrabold text-[#2c1514] leading-tight">
                   Selesaikan Belanja Pasar
                 </h3>
-                <span className="text-[11px] text-stone-500 font-medium">
+                <span className="text-[11px] text-[#737a65] font-medium">
                   Catat pengeluaran nyata ke database dompet keluarga
                 </span>
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 flex flex-col gap-1">
-              <span className="text-xs text-stone-500 font-medium">Total Bahan yang Dicentang:</span>
-              <span className="text-2xl font-extrabold text-[#0C4B20] tabular-nums">
+            <div className="p-4 rounded-2xl bg-[#fff0ef] border border-stone-200/60 flex flex-col gap-1">
+              <span className="text-xs text-[#737a65] font-medium">Total Bahan yang Dicentang di Pasar:</span>
+              <span className="text-2xl font-extrabold text-[#306a3b] tabular-nums font-mono">
                 Rp {totalSudahDibeli.toLocaleString('id-ID')}
               </span>
-              <span className="text-[11px] text-stone-500 mt-1">
-                Akan dicatat otomatis ke riwayat pengeluaran dompet keluarga Anda.
+              <span className="text-[11px] text-[#737a65] mt-1">
+                Bahan yang ada di kulkas (hemat Rp {totalHematKulkas.toLocaleString('id-ID')}) otomatis tidak ditagihkan ke pengeluaran.
               </span>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-stone-700">Catatan Pengeluaran:</label>
+              <label className="text-xs font-bold text-[#737a65]">Catatan Pengeluaran:</label>
               <input
                 type="text"
                 value={finishCatatan}
                 onChange={(e) => setFinishCatatan(e.target.value)}
                 placeholder="misal: Belanja sayur & lauk segar di Pasar Wonokromo"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                className="w-full px-4 py-3 rounded-2xl bg-[#fff0ef] border border-stone-200 text-xs font-semibold text-[#2c1514] focus:outline-none focus:ring-2 focus:ring-[#306a3b]"
               />
             </div>
 
@@ -1191,7 +1504,7 @@ function BelanjaContent({ params }: PageProps) {
                 type="button"
                 onClick={() => setShowFinishModal(false)}
                 disabled={isSubmittingFinish}
-                className="min-h-[46px] px-5 py-2 rounded-xl bg-stone-100 text-stone-700 text-xs font-bold hover:bg-stone-200 cursor-pointer disabled:opacity-50"
+                className="min-h-[48px] px-5 py-2 rounded-full bg-stone-100 text-[#2c1514] text-xs font-bold hover:bg-stone-200 cursor-pointer disabled:opacity-50"
               >
                 Batal
               </button>
@@ -1199,14 +1512,10 @@ function BelanjaContent({ params }: PageProps) {
                 type="button"
                 onClick={handleConfirmFinish}
                 disabled={isSubmittingFinish}
-                style={{
-                  background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
-                  boxShadow: '0 4px 14px rgba(109, 160, 3, 0.28)',
-                }}
-                className="min-h-[46px] px-6 py-2 rounded-xl text-white text-xs font-bold hover:brightness-105 cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                className="min-h-[48px] px-6 py-2.5 rounded-full bg-[#6da003] hover:bg-[#466800] text-white text-xs font-bold cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-colors"
               >
                 {isSubmittingFinish ? (
-                  <span>Menyimpan...</span>
+                  <span>Menyimpan ke Database...</span>
                 ) : (
                   <span>Catat ke Dompet →</span>
                 )}
