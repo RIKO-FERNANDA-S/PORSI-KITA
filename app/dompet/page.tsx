@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 
@@ -15,49 +15,6 @@ interface TransaksiItem {
   type: 'expense' | 'income';
 }
 
-const INITIAL_TRANSACTIONS: TransaksiItem[] = [
-  {
-    id: 'tx-1',
-    day: '2025-05-15',
-    dayLabel: 'Kamis, 15 Mei 2025 (Hari Ini)',
-    desc: 'Belanja Menu Harian (Bayam, Ayam, Tahu & Bumbu)',
-    merchant: 'Warung Sayur Bu Tejo',
-    time: '07:15 WIB',
-    amount: 70000,
-    type: 'expense',
-  },
-  {
-    id: 'tx-2',
-    day: '2025-05-14',
-    dayLabel: 'Rabu, 14 Mei 2025',
-    desc: 'Bahan Ikan Kembung, Sayur Kangkung & Tahu',
-    merchant: 'Pasar Minggu Pagi',
-    time: '06:45 WIB',
-    amount: 98500,
-    type: 'expense',
-  },
-  {
-    id: 'tx-3',
-    day: '2025-05-12',
-    dayLabel: 'Senin, 12 Mei 2025',
-    desc: 'Jatah Uang Belanja Mingguan (Minggu ke-3)',
-    merchant: 'Transfer Bank Mandiri',
-    time: '10:00 WIB',
-    amount: 1500000,
-    type: 'income',
-  },
-  {
-    id: 'tx-4',
-    day: '2025-05-12',
-    dayLabel: 'Senin, 12 Mei 2025',
-    desc: 'Bumbu Dapur, Tempe, Minyak Goreng',
-    merchant: 'Warung Sayur Bu Tejo',
-    time: '16:20 WIB',
-    amount: 45000,
-    type: 'expense',
-  },
-];
-
 interface WarungLangganan {
   id: string;
   nama: string;
@@ -65,30 +22,6 @@ interface WarungLangganan {
   count: number;
   totalSpent: number;
 }
-
-const INITIAL_WARUNGS: WarungLangganan[] = [
-  {
-    id: 'w-1',
-    nama: 'Warung Sayur Bu Tejo',
-    tag: '100m dari rumah',
-    count: 12,
-    totalSpent: 840000,
-  },
-  {
-    id: 'w-2',
-    nama: 'Pasar Minggu Pagi',
-    tag: 'Komoditas segar',
-    count: 4,
-    totalSpent: 920000,
-  },
-  {
-    id: 'w-3',
-    nama: 'Tukang Ikan Keliling',
-    tag: 'Langganan pagi',
-    count: 5,
-    totalSpent: 290000,
-  },
-];
 
 // Helper formatting Rupiah
 function formatRp(amount: number): string {
@@ -98,33 +31,125 @@ function formatRp(amount: number): string {
 export default function DompetBulananPage() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // Financial Ledger State
-  const [totalBudget, setTotalBudget] = useState(4500000);
-  const [usedBudget, setUsedBudget] = useState(2050000);
-  const [remainingBalance, setRemainingBalance] = useState(2450000);
-  const [transactions, setTransactions] = useState<TransaksiItem[]>(INITIAL_TRANSACTIONS);
-  const [warungs, setWarungs] = useState<WarungLangganan[]>(INITIAL_WARUNGS);
+  // Financial Ledger State (Real-time dari Database PostgreSQL)
+  const [totalBudget, setTotalBudget] = useState(0);
+  const [usedBudget, setUsedBudget] = useState(0);
+  const [remainingBalance, setRemainingBalance] = useState(0);
+  const [transactions, setTransactions] = useState<TransaksiItem[]>([]);
+  const [warungs, setWarungs] = useState<WarungLangganan[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Filters state
   const [filterType, setFilterType] = useState<'all' | 'expense' | 'income'>('all');
   const [selectedMerchantFilter, setSelectedMerchantFilter] = useState('all');
-  const [viewState, setViewState] = useState<'normal' | 'empty' | 'loading' | 'error'>('normal');
+  const [viewState, setViewState] = useState<'normal' | 'empty' | 'loading' | 'error'>('loading');
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'expense' | 'income'>('expense');
   const [modalAmount, setModalAmount] = useState('');
-  const [modalMerchant, setModalMerchant] = useState('Warung Sayur Bu Tejo');
+  const [modalMerchant, setModalMerchant] = useState('Warung Sayur');
   const [modalDesc, setModalDesc] = useState('');
 
-  // Calculations
-  const usedBudgetPercent = Math.min(
-    100,
-    Math.max(0, Math.round((usedBudget / totalBudget) * 100))
-  );
+  // Sinkronisasi data keuangan real-time dari Database PostgreSQL
+  const loadRealtimeFinance = async () => {
+    setLoading(true);
+    setViewState('loading');
+    try {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {}
 
-  const sisaHari = 17;
-  const batasAmanHarian = Math.round(remainingBalance / sisaHari);
+      const query = meta?.phone ? `?phone=${encodeURIComponent(meta.phone)}` : '';
+
+      // 1. Ambil budget belanja & saldo riil dari database
+      const resBudget = await fetch(`/api/family/budget${query}`);
+      const bData = await resBudget.json();
+
+      if (bData.success) {
+        setTotalBudget(bData.total_anggaran || 0);
+        setUsedBudget(bData.pengeluaran || 0);
+        setRemainingBalance(bData.saldo || 0);
+      }
+
+      // 2. Ambil riwayat transaksi riil dari database
+      const resTx = await fetch(`/api/family/transaction${query}`);
+      const txData = await resTx.json();
+
+      if (txData.success) {
+        if (txData.transactions && txData.transactions.length > 0) {
+          const today = new Date();
+          const formatted: TransaksiItem[] = txData.transactions.map((t: any) => {
+            const d = new Date(t.created_at);
+            const isToday =
+              d.getDate() === today.getDate() &&
+              d.getMonth() === today.getMonth() &&
+              d.getFullYear() === today.getFullYear();
+            const dayKey = d.toISOString().split('T')[0];
+            const dayLabel = isToday
+              ? `${d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} (Hari Ini)`
+              : d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+
+            return {
+              id: t.id,
+              day: dayKey,
+              dayLabel,
+              desc: t.catatan || (t.jenis === 'PENGELUARAN' ? 'Belanja Dapur' : 'Pemasukan Saldo'),
+              merchant: t.warung?.nama_warung || 'Warung Sayur',
+              time,
+              amount: Number(t.nominal),
+              type: (t.jenis === 'PENGELUARAN' ? 'expense' : 'income') as 'expense' | 'income',
+            };
+          });
+
+          setTransactions(formatted);
+          setViewState('normal');
+        } else {
+          // Jika belum ada data transaksi sama sekali di database, KOSONGKAN
+          setTransactions([]);
+          setViewState('empty');
+        }
+
+        if (txData.warungs && txData.warungs.length > 0) {
+          setWarungs(txData.warungs);
+        } else {
+          setWarungs([]);
+        }
+      }
+    } catch (err) {
+      console.warn('Gagal memuat data dompet realtime:', err);
+      setViewState('error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Realtime Date State
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setCurrentDate(new Date());
+    loadRealtimeFinance();
+  }, []);
+
+  // Realtime calculations
+  const currentMonthLabel = currentDate
+    ? currentDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+    : 'Bulan Ini';
+  const totalDaysInMonth = currentDate
+    ? new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+    : 30;
+  const sisaHari = currentDate
+    ? Math.max(1, totalDaysInMonth - currentDate.getDate() + 1)
+    : 30;
+  const batasAmanHarian = remainingBalance > 0 ? Math.round(remainingBalance / sisaHari) : 0;
+
+  const usedBudgetPercent = totalBudget > 0
+    ? Math.min(100, Math.max(0, Math.round((usedBudget / totalBudget) * 100)))
+    : 0;
 
   // Filtered transactions
   const filteredTransactions = useMemo(() => {
@@ -153,7 +178,11 @@ export default function DompetBulananPage() {
     setModalType(type);
     setModalAmount('');
     setModalDesc('');
-    setModalMerchant('Warung Sayur Bu Tejo');
+    if (type === 'income') {
+      setModalMerchant('Transfer Bank Mandiri');
+    } else {
+      setModalMerchant(warungs.length > 0 ? warungs[0].nama : 'Warung Sayur Terdekat');
+    }
     setModalOpen(true);
   };
 
@@ -180,47 +209,88 @@ export default function DompetBulananPage() {
     setModalAmount(sum.toLocaleString('id-ID'));
   };
 
-  // Handle Submit New Transaction
-  const handleFormSubmit = (e: React.FormEvent) => {
+  // Handle Submit New Transaction to Database
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const rawNum = parseInt(modalAmount.replace(/\D/g, ''), 10);
     if (!rawNum || rawNum <= 0 || !modalDesc.trim()) return;
 
-    const newTx: TransaksiItem = {
-      id: `tx-${Date.now()}`,
-      day: '2025-05-15',
-      dayLabel: 'Kamis, 15 Mei 2025 (Hari Ini)',
-      desc: modalDesc.trim(),
-      merchant: modalMerchant,
-      time: 'Baru Saja',
-      amount: rawNum,
-      type: modalType,
-    };
+    try {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {}
 
-    setTransactions((prev) => [newTx, ...prev]);
+      const res = await fetch('/api/family/transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nominal: rawNum,
+          catatan: modalDesc.trim(),
+          jenis: modalType === 'expense' ? 'PENGELUARAN' : 'PEMASUKAN',
+          merchant: modalMerchant,
+          phone: meta?.phone,
+        }),
+      });
 
-    // Recalculate ledger balances
-    if (modalType === 'expense') {
-      setRemainingBalance((prev) => Math.max(0, prev - rawNum));
-      setUsedBudget((prev) => prev + rawNum);
-      // Update warung stats
-      setWarungs((prev) =>
-        prev.map((w) =>
-          w.nama === modalMerchant
-            ? { ...w, count: w.count + 1, totalSpent: w.totalSpent + rawNum }
-            : w
-        )
-      );
-    } else {
-      setRemainingBalance((prev) => prev + rawNum);
-      setTotalBudget((prev) => prev + rawNum);
+      const data = await res.json();
+      if (data.success && data.transaction) {
+        setTotalBudget(data.total_anggaran);
+        setUsedBudget(data.pengeluaran);
+        setRemainingBalance(data.saldo);
+
+        const d = new Date(data.transaction.created_at);
+        const dayKey = d.toISOString().split('T')[0];
+        const dayLabel = `${d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} (Hari Ini)`;
+        const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+
+        const newTx: TransaksiItem = {
+          id: data.transaction.id,
+          day: dayKey,
+          dayLabel,
+          desc: data.transaction.catatan,
+          merchant: data.transaction.warung?.nama_warung || modalMerchant,
+          time,
+          amount: Number(data.transaction.nominal),
+          type: modalType,
+        };
+
+        setTransactions((prev) => [newTx, ...prev]);
+        setViewState('normal');
+
+        // Perbarui daftar warung jika belum terdaftar
+        setWarungs((prev) => {
+          const exists = prev.some((w) => w.nama === modalMerchant);
+          if (exists) {
+            return prev.map((w) =>
+              w.nama === modalMerchant
+                ? { ...w, count: w.count + 1, totalSpent: w.totalSpent + rawNum }
+                : w
+            );
+          } else {
+            return [
+              ...prev,
+              {
+                id: data.transaction.warung_id || `w-${Date.now()}`,
+                nama: modalMerchant,
+                tag: 'Warung Langganan',
+                count: 1,
+                totalSpent: rawNum,
+              },
+            ];
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Gagal menyimpan transaksi ke database:', err);
+    } finally {
+      handleCloseModal();
     }
-
-    handleCloseModal();
   };
 
-  // Handle Edit Prompt
-  const handleEditPrompt = (tx: TransaksiItem) => {
+  // Handle Edit Prompt with Database Persistence
+  const handleEditPrompt = async (tx: TransaksiItem) => {
     const updated = prompt(
       `Perbarui nominal untuk "${tx.desc}":\n(Contoh: 75000)`,
       String(tx.amount)
@@ -228,33 +298,75 @@ export default function DompetBulananPage() {
     if (updated) {
       const cleanNum = parseInt(updated.replace(/\D/g, ''), 10);
       if (!isNaN(cleanNum) && cleanNum > 0) {
-        const diff = cleanNum - tx.amount;
-        setTransactions((prev) =>
-          prev.map((item) => (item.id === tx.id ? { ...item, amount: cleanNum } : item))
-        );
-        if (tx.type === 'expense') {
-          setUsedBudget((prev) => prev + diff);
-          setRemainingBalance((prev) => prev - diff);
-        } else {
-          setRemainingBalance((prev) => prev + diff);
+        try {
+          const res = await fetch('/api/family/transaction', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: tx.id,
+              nominal: cleanNum,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            const diff = cleanNum - tx.amount;
+            setTransactions((prev) =>
+              prev.map((item) => (item.id === tx.id ? { ...item, amount: cleanNum } : item))
+            );
+            if (tx.type === 'expense') {
+              setUsedBudget((prev) => prev + diff);
+              setRemainingBalance((prev) => Math.max(0, prev - diff));
+            } else {
+              setRemainingBalance((prev) => prev + diff);
+              setTotalBudget((prev) => prev + diff);
+            }
+          }
+        } catch (err) {
+          console.warn('Gagal update transaksi:', err);
         }
       }
     }
   };
 
   // Handle Add New Warung
-  const handleAddMerchant = () => {
-    const name = prompt('Masukkan nama warung atau pedagang langganan baru:');
+  const handleAddMerchant = async () => {
+    const name = prompt('Masukkan nama warung atau pedagang langganan baru:\n(Contoh: Warung Sayur Bu Ani)');
     if (name && name.trim()) {
       const trimmed = name.trim();
+      try {
+        let meta: any = null;
+        try {
+          const raw = localStorage.getItem('porsi_kita_auth_meta');
+          if (raw) meta = JSON.parse(raw);
+        } catch {}
+
+        const res = await fetch('/api/family/transaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'add_warung',
+            phone: meta?.phone,
+            nama_warung: trimmed,
+          }),
+        });
+        const data = await res.json();
+        if (data.success && data.warung) {
+          setWarungs((prev) => [data.warung, ...prev]);
+          alert(`Warung "${trimmed}" berhasil ditambahkan.`);
+          return;
+        }
+      } catch (err) {
+        console.warn('Gagal menyimpan warung ke database:', err);
+      }
+
       const newWarung: WarungLangganan = {
         id: `w-${Date.now()}`,
         nama: trimmed,
-        tag: 'Langganan baru',
+        tag: 'Warung Langganan',
         count: 0,
         totalSpent: 0,
       };
-      setWarungs((prev) => [...prev, newWarung]);
+      setWarungs((prev) => [newWarung, ...prev]);
       alert(`Warung "${trimmed}" berhasil ditambahkan.`);
     }
   };
@@ -334,7 +446,7 @@ export default function DompetBulananPage() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
-              <span>Mei 2025 • Dompet Bulanan Keluarga</span>
+              <span>{currentMonthLabel} • Dompet Bulanan Keluarga</span>
             </div>
 
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 pt-1">
@@ -361,7 +473,7 @@ export default function DompetBulananPage() {
                   {/* Left: Saldo and Total Info */}
                   <div className="flex flex-col">
                     <span className="text-[12px] font-semibold tracking-wider text-white/80 uppercase">
-                      SISA SALDO DOMPET (MEI 2025)
+                      SISA SALDO DOMPET ({currentMonthLabel.toUpperCase()})
                     </span>
                     <div className="text-[36px] sm:text-[44px] font-extrabold text-white tracking-tight mt-1 font-mono">
                       {formatRp(remainingBalance)}
@@ -672,66 +784,15 @@ export default function DompetBulananPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setViewState('normal')}
-                      className="min-h-[48px] px-6 rounded-full bg-[#ba1a1a] text-white font-bold text-sm hover:opacity-90 transition-opacity"
+                      onClick={loadRealtimeFinance}
+                      className="min-h-[48px] px-6 rounded-full bg-[#ba1a1a] text-white font-bold text-sm hover:opacity-90 transition-opacity cursor-pointer"
                     >
                       Muat Ulang Catatan
                     </button>
                   </div>
                 )}
 
-                {/* UI State Switcher Pills (Prototype Support) */}
-                <div className="pt-2 flex items-center justify-center">
-                  <div className="flex items-center gap-1 p-1 rounded-full bg-[#fff0ef] border border-stone-200/60">
-                    <span className="text-[11px] text-[#737a65] px-2 font-medium">
-                      Pratinjau Status:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setViewState('normal')}
-                      className={`min-h-[28px] px-3 rounded-full text-[11px] transition-all cursor-pointer ${
-                        viewState === 'normal'
-                          ? 'bg-white text-[#2c1514] font-bold shadow-2xs'
-                          : 'text-[#737a65] hover:text-[#2c1514]'
-                      }`}
-                    >
-                      Data Normal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewState('empty')}
-                      className={`min-h-[28px] px-3 rounded-full text-[11px] transition-all cursor-pointer ${
-                        viewState === 'empty'
-                          ? 'bg-white text-[#2c1514] font-bold shadow-2xs'
-                          : 'text-[#737a65] hover:text-[#2c1514]'
-                      }`}
-                    >
-                      Kosong
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewState('loading')}
-                      className={`min-h-[28px] px-3 rounded-full text-[11px] transition-all cursor-pointer ${
-                        viewState === 'loading'
-                          ? 'bg-white text-[#2c1514] font-bold shadow-2xs'
-                          : 'text-[#737a65] hover:text-[#2c1514]'
-                      }`}
-                    >
-                      Memuat
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewState('error')}
-                      className={`min-h-[28px] px-3 rounded-full text-[11px] transition-all cursor-pointer ${
-                        viewState === 'error'
-                          ? 'bg-white text-[#2c1514] font-bold shadow-2xs'
-                          : 'text-[#737a65] hover:text-[#2c1514]'
-                      }`}
-                    >
-                      Gangguan
-                    </button>
-                  </div>
-                </div>
+
 
               </div>
             </div>
@@ -751,25 +812,36 @@ export default function DompetBulananPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {warungs.map((w) => (
-                    <div
-                      key={w.id}
-                      className="bg-white rounded-2xl p-4 shadow-2xs border border-stone-200/60 transition-all hover:shadow-xs"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-bold text-[14px] text-[#2c1514]">{w.nama}</span>
-                        <span className="px-2 py-0.5 rounded-full bg-[#b2f2b6] text-[#367041] text-[10px] font-bold whitespace-nowrap">
-                          {w.tag}
-                        </span>
-                      </div>
-                      <div className="border-t border-stone-100 pt-2 mt-2 flex items-center justify-between text-[12px] text-[#737a65]">
-                        <span>{w.count}x Belanja</span>
-                        <span className="font-bold text-[#2c1514] font-mono">
-                          Total: {formatRp(w.totalSpent)}
-                        </span>
-                      </div>
+                  {warungs.length === 0 ? (
+                    <div className="bg-white/80 rounded-2xl p-5 text-center border border-dashed border-stone-200">
+                      <p className="text-[13px] text-[#737a65] font-medium">
+                        Belum ada warung langganan tercatat.
+                      </p>
+                      <p className="text-[11px] text-[#8e9185] mt-1">
+                        Daftar warung bertambah otomatis saat Anda mencatat transaksi belanja dapur.
+                      </p>
                     </div>
-                  ))}
+                  ) : (
+                    warungs.map((w) => (
+                      <div
+                        key={w.id}
+                        className="bg-white rounded-2xl p-4 shadow-2xs border border-stone-200/60 transition-all hover:shadow-xs"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-bold text-[14px] text-[#2c1514]">{w.nama}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-[#b2f2b6] text-[#367041] text-[10px] font-bold whitespace-nowrap">
+                            {w.tag}
+                          </span>
+                        </div>
+                        <div className="border-t border-stone-100 pt-2 mt-2 flex items-center justify-between text-[12px] text-[#737a65]">
+                          <span>{w.count}x Belanja</span>
+                          <span className="font-bold text-[#2c1514] font-mono">
+                            Total: {formatRp(w.totalSpent)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 <button
@@ -793,19 +865,35 @@ export default function DompetBulananPage() {
                     </svg>
                   </div>
                   <h3 className="font-bold text-[16px] text-[#2c1514]">
-                    Catatan Penghematan Ibu
+                    Catatan Penghematan Keluarga
                   </h3>
                 </div>
 
                 <p className="text-[13px] text-[#2c1514] leading-relaxed">
-                  Minggu ini Ibu menghemat <span className="font-bold text-[#306a3b]">{formatRp(65000)}</span> karena memasak sesuai takaran porsi keluarga tanpa ada lauk yang terbuang.
+                  {totalBudget > 0 ? (
+                    remainingBalance > 0 ? (
+                      <>
+                        Keluarga saat ini memiliki sisa saldo dompet sebesar{' '}
+                        <span className="font-bold text-[#306a3b]">{formatRp(remainingBalance)}</span> untuk{' '}
+                        {sisaHari} hari ke depan ({formatRp(batasAmanHarian)}/hari).
+                      </>
+                    ) : (
+                      <>
+                        Anggaran belanja bulan ini telah terpakai seluruhnya ({formatRp(usedBudget)}). Harap pantau pengeluaran harian dengan cermat.
+                      </>
+                    )
+                  ) : (
+                    <>
+                      Belum ada anggaran belanja yang ditentukan. Silakan tambahkan saldo atau catat belanja pertama Anda.
+                    </>
+                  )}
                 </p>
 
                 <div className="pt-2 flex items-center gap-2 text-[#466800] text-[12px] font-semibold">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>0% Makanan terbuang (Food Waste Nihil)</span>
+                  <span>Porsi terencana (Food Waste Terkendali)</span>
                 </div>
               </section>
 
@@ -815,10 +903,10 @@ export default function DompetBulananPage() {
                   Tips Belanja Cerdas
                 </span>
                 <h4 className="font-bold text-[14px] text-[#2c1514]">
-                  Beli Telur &amp; Tahu Hari Ini?
+                  Belanja Hemat &amp; Segar
                 </h4>
                 <p className="text-[13px] text-[#5e5e5f] leading-relaxed">
-                  Harga telur di Warung Bu Tejo sedang normal {formatRp(28000)}/kg. Sangat cocok untuk stok lauk tinggi protein 3 hari ke depan.
+                  Belanja bahan masakan secukupnya sesuai takaran porsi harian keluarga agar tidak ada bahan busuk di kulkas. Belanja di pasar tradisional atau warung terdekat untuk harga komoditas terbaik.
                 </p>
               </section>
 
@@ -859,7 +947,10 @@ export default function DompetBulananPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setModalType('expense')}
+                    onClick={() => {
+                      setModalType('expense');
+                      setModalMerchant(warungs.length > 0 ? warungs[0].nama : 'Warung Sayur Terdekat');
+                    }}
                     className={`min-h-[46px] rounded-full text-[13px] font-bold transition-all cursor-pointer ${
                       modalType === 'expense'
                         ? 'bg-[#306a3b] text-white shadow-xs'
@@ -870,7 +961,10 @@ export default function DompetBulananPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setModalType('income')}
+                    onClick={() => {
+                      setModalType('income');
+                      setModalMerchant('Transfer Bank Mandiri');
+                    }}
                     className={`min-h-[46px] rounded-full text-[13px] font-bold transition-all cursor-pointer ${
                       modalType === 'income'
                         ? 'bg-[#306a3b] text-white shadow-xs'
@@ -923,12 +1017,12 @@ export default function DompetBulananPage() {
                   {modalType === 'expense' ? 'Beli di Mana?' : 'Sumber Saldo'}
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {[
-                    'Warung Sayur Bu Tejo',
-                    'Pasar Minggu Pagi',
-                    'Tukang Ikan Keliling',
-                    'Transfer Bank Mandiri',
-                  ].map((merchant) => (
+                  {(modalType === 'expense'
+                    ? (warungs.length > 0
+                        ? Array.from(new Set([...warungs.map((w) => w.nama), 'Warung Sayur Terdekat', 'Pasar Tradisional']))
+                        : ['Warung Sayur Terdekat', 'Pasar Tradisional', 'Tukang Sayur Keliling', 'Supermarket'])
+                    : ['Transfer Bank Mandiri', 'Transfer BCA / BRI', 'Uang Tunai (Cash)', 'Jatah Belanja Bulanan']
+                  ).map((merchant) => (
                     <button
                       key={merchant}
                       type="button"

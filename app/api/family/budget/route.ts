@@ -61,21 +61,31 @@ export async function GET(req: NextRequest) {
     const budgetBelanja = Number(family.budget_belanja) || 3000000;
     const tipeBudget = (family.tipe_budget as 'bulanan' | 'mingguan') || 'bulanan';
 
-    // Aturan bisnis: Jika mingguan kalikan dalam 1 bulan (x 4)
-    const totalAnggaran = tipeBudget === 'mingguan' ? budgetBelanja * 4 : budgetBelanja;
+    // Hitung total pengeluaran dan pemasukan dari tabel transactions
+    const [expenses, incomes] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: {
+          family_id: family.id,
+          jenis: 'PENGELUARAN',
+        },
+        _sum: {
+          nominal: true,
+        },
+      }),
+      prisma.transaction.aggregate({
+        where: {
+          family_id: family.id,
+          jenis: 'PEMASUKAN',
+        },
+        _sum: {
+          nominal: true,
+        },
+      }),
+    ]);
 
-    // Hitung total pengeluaran dari tabel transactions
-    const expenses = await prisma.transaction.aggregate({
-      where: {
-        family_id: family.id,
-        jenis: 'PENGELUARAN',
-      },
-      _sum: {
-        nominal: true,
-      },
-    });
-
+    const totalPemasukan = Number(incomes._sum.nominal) || 0;
     const pengeluaran = Number(expenses._sum.nominal) || 0;
+    const totalAnggaran = (tipeBudget === 'mingguan' ? budgetBelanja * 4 : budgetBelanja) + totalPemasukan;
     const saldo = Math.max(0, totalAnggaran - pengeluaran);
     const budgetHarianRp = Number(family.budget_harian_rp) || Math.round(totalAnggaran / 30);
 
