@@ -167,6 +167,7 @@ export default function MenuPage() {
   const [selectedMemberTabId, setSelectedMemberTabId] = useState<string>('');
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenerateNotice, setRegenerateNotice] = useState<string | null>(null);
+  const [dbSyncStatus, setDbSyncStatus] = useState<string | null>(null);
 
   // Realtime date state (sinkronisasi di useEffect untuk menghindari prerender error Next.js 16)
   const [currentDate, setCurrentDate] = useState<Date | null>(null);
@@ -210,6 +211,36 @@ export default function MenuPage() {
         }
       })
       .catch((err) => console.warn('Gagal memuat gambar resep database:', err));
+
+    // Sinkronisasi rencana menu 7 hari dari database PostgreSQL (tabel meal_plans)
+    fetch('/api/menu')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.menu) {
+          setRencanaMenu(data.menu);
+          saveStoredMenu(data.menu);
+          setDbSyncStatus('Tersinkron Database');
+        } else if (m) {
+          // Jika belum tersimpan di database namun ada data lokal, lakukan initial sync (upsert)
+          fetch('/api/menu', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              menu: m,
+              total_biaya: m.total_biaya_mingguan_rp,
+              family_id: k?.id,
+            }),
+          })
+            .then((res) => res.json())
+            .then((resData) => {
+              if (resData.success) {
+                setDbSyncStatus('Tersinkron Database');
+              }
+            })
+            .catch((err) => console.warn('Gagal initial sync menu ke database:', err));
+        }
+      })
+      .catch((err) => console.warn('Gagal sinkronisasi menu dari database:', err));
   }, []);
 
   // Hitung tanggal riil kalender berjalan 7 hari ke depan mulai dari HARI INI (paling kiri)
@@ -261,11 +292,11 @@ export default function MenuPage() {
     });
   }, [currentDate]);
 
-  // Handle Regenerate Menu with Micro-interaction
+  // Handle Regenerate Menu with Micro-interaction and PostgreSQL Database Upsert
   const handleRegenerate = () => {
     if (!keluarga) return;
     setIsRegenerating(true);
-    setRegenerateNotice('Menghitung Ulang Menu...');
+    setRegenerateNotice('Menghitung & Menyimpan ke Database...');
 
     setTimeout(() => {
       const fresh = generateMenu({
@@ -278,12 +309,32 @@ export default function MenuPage() {
 
       saveStoredMenu(fresh);
       setRencanaMenu(fresh);
+      setSelectedDayIndex(1); // Reset ke Hari Ini (paling kiri)
+
+      // Update data di database PostgreSQL (Upsert tabel meal_plans agar tidak ada penumpukan data)
+      fetch('/api/menu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          menu: fresh,
+          total_biaya: fresh.total_biaya_mingguan_rp,
+          family_id: keluarga.id,
+        }),
+      })
+        .then((res) => res.json())
+        .then((resData) => {
+          if (resData.success) {
+            setDbSyncStatus('Tersimpan di Database');
+          }
+        })
+        .catch((err) => console.warn('Gagal update menu ke database:', err));
+
       setIsRegenerating(false);
-      setRegenerateNotice('Menu Berhasil Diperbarui!');
+      setRegenerateNotice('Menu Berhasil Diperbarui & Disimpan!');
 
       setTimeout(() => {
         setRegenerateNotice(null);
-      }, 2000);
+      }, 2500);
     }, 900);
   };
 
@@ -420,6 +471,24 @@ export default function MenuPage() {
     setRencanaMenu(updatedRencana);
     setSwapModalOpen(false);
     setResepTargetSwap(null);
+
+    // Sinkronkan hasil swap ke database PostgreSQL (update baris meal_plans yang ada)
+    fetch('/api/menu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        menu: updatedRencana,
+        total_biaya: updatedRencana.total_biaya_mingguan_rp,
+        family_id: keluarga?.id,
+      }),
+    })
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData.success) {
+          setDbSyncStatus('Tersimpan di Database');
+        }
+      })
+      .catch((err) => console.warn('Gagal update swap ke database:', err));
   };
 
   if (loading || !rencanaMenu) {
@@ -547,6 +616,10 @@ export default function MenuPage() {
                   </h1>
                   <span className="inline-flex items-center px-3.5 py-1 rounded-full bg-[#b2f2b6] text-[#367041] text-[12px] font-bold">
                     Minggu Ini • {rencanaMenu.is_fallback_package ? 'Paket Hemat' : 'Variasi Custom'}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0fdf4] text-[#166534] text-[12px] font-bold border border-[#bbf7d0]">
+                    <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                    <span>{dbSyncStatus || 'Tersinkron Database'}</span>
                   </span>
                 </div>
                 <p className="text-[14px] sm:text-[15px] text-[#434937] max-w-2xl leading-relaxed">
