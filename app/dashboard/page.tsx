@@ -56,6 +56,7 @@ export default function DashboardPage() {
     cost: string;
     tags: string[];
     portionDetail: string;
+    dishes?: any[];
   } | null>(null);
 
   // Modal catat pengeluaran state
@@ -80,9 +81,7 @@ export default function DashboardPage() {
     // 0. Sinkronisasi realtime hari dan tanggal lokal pengguna
     const now = new Date();
     setCurrentDate(now);
-    const dayOfWeek = now.getDay();
-    const todayIndex = dayOfWeek === 0 ? 7 : dayOfWeek;
-    setSelectedDayIndex(todayIndex);
+    setSelectedDayIndex(1); // 1 = Hari Ini (paling kiri, selaras dengan app/menu/page.tsx)
 
     // 1. Inisialisasi awal cepat dari Local Storage
     try {
@@ -113,6 +112,29 @@ export default function DashboardPage() {
     } catch (e) {
       console.warn('Inisialisasi lokal fallback notice:', e);
     }
+
+    // Sinkronisasi menu aktif dari Database PostgreSQL (agar selalu up-to-date)
+    fetch('/api/menu')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.menu) {
+          setRencanaMenu(data.menu);
+          try {
+            localStorage.setItem('porsi_kita_rencana_menu_7hari', JSON.stringify(data.menu));
+          } catch {}
+          if (data.menu.hari && data.menu.hari.length > 0) {
+            const rawItems = buatDaftarBelanjaMingguan(data.menu.hari);
+            const initialItems: ShoppingItem[] = rawItems.slice(0, 8).map((it, idx) => ({
+              id: `item-${idx + 1}`,
+              name: `${it.nama_bahan} (${it.kebutuhan_beli_gram >= 1000 ? `${(it.kebutuhan_beli_gram / 1000).toFixed(1)} kg` : `${it.kebutuhan_beli_gram}g`})`,
+              price: it.estimasi_biaya_rp,
+              checked: idx < 2,
+            }));
+            setShoppingList(initialItems);
+          }
+        }
+      })
+      .catch((err) => console.warn('Gagal sinkronisasi menu dari database di dashboard:', err));
 
     // 2. Sinkronisasi data real-time dengan Database PostgreSQL
     const checkSecurityStatus = async () => {
@@ -246,9 +268,9 @@ export default function DashboardPage() {
     );
   }, [rencanaMenu, selectedDayIndex]);
 
-  // Strip 7 Hari Menu dengan Tanggal Realtime (Senin s/d Minggu pada minggu berjalan)
+  // Strip 7 Hari Menu dengan Tanggal Realtime (Mulai dari HARI INI di posisi paling kiri, selaras dengan app/menu/page.tsx)
   const daysList = useMemo(() => {
-    const dayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const monthNamesShort = [
       'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
       'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
@@ -261,52 +283,48 @@ export default function DashboardPage() {
     if (!currentDate) {
       return [1, 2, 3, 4, 5, 6, 7].map((num) => ({
         hari_ke: num,
-        shortLabel: dayNames[num - 1].slice(0, 3),
-        fullLabel: dayNames[num - 1],
+        shortLabel: num === 1 ? 'Hari Ini' : `H+${num - 1}`,
+        fullLabel: num === 1 ? 'Hari Ini' : `Hari ke-${num}`,
         dateNum: num,
         monthShort: '',
         monthFull: '',
         year: 2026,
         dateFormatted: `Hari ${num}`,
-        fullDateFormatted: `${dayNames[num - 1]}`,
-        isToday: false,
+        fullDateFormatted: num === 1 ? 'Hari Ini' : `Hari ke-${num}`,
+        isToday: num === 1,
         isCurrent: num === selectedDayIndex,
       }));
     }
 
     const today = new Date(currentDate);
-    const dow = today.getDay(); // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
-    const offsetToMonday = dow === 0 ? -6 : 1 - dow;
-
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + offsetToMonday);
-    monday.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
 
     return [1, 2, 3, 4, 5, 6, 7].map((num) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + (num - 1));
+      // num = 1 adalah Hari Ini (offset 0 hari, berada di bagian paling kiri)
+      const d = new Date(today);
+      d.setDate(today.getDate() + (num - 1));
 
-      const dayName = dayNames[num - 1];
+      const dayName = dayNames[d.getDay()];
       const dateNum = d.getDate();
       const monthShort = monthNamesShort[d.getMonth()];
       const monthFull = monthNamesFull[d.getMonth()];
       const year = d.getFullYear();
-
-      const isToday =
-        d.getDate() === today.getDate() &&
-        d.getMonth() === today.getMonth() &&
-        d.getFullYear() === today.getFullYear();
+      const isToday = num === 1;
 
       return {
         hari_ke: num,
-        shortLabel: dayName.slice(0, 3), // 'Sen', 'Sel', 'Rab', etc.
+        shortLabel: isToday ? 'Hari Ini' : dayName.slice(0, 3),
         fullLabel: dayName,
         dateNum,
         monthShort,
         monthFull,
         year,
         dateFormatted: `${dateNum} ${monthShort}`,
-        fullDateFormatted: `${dayName}, ${dateNum} ${monthFull} ${year}`,
+        fullDateFormatted: isToday
+          ? `${dayName}, ${dateNum} ${monthFull} ${year} (Hari Ini)`
+          : num === 2
+          ? `${dayName}, ${dateNum} ${monthFull} ${year} (Besok)`
+          : `${dayName}, ${dateNum} ${monthFull} ${year}`,
         isToday,
         isCurrent: num === selectedDayIndex,
       };
@@ -316,6 +334,14 @@ export default function DashboardPage() {
   const currentDayItem = useMemo(() => {
     return daysList.find((d) => d.hari_ke === selectedDayIndex) || daysList[0];
   }, [daysList, selectedDayIndex]);
+
+  // Status sayuran harian (apakah 1x masak pagi-siang / 1x seharian / 2x masak)
+  const sayurPagi = currentDayData?.sesi_makan?.pagi?.hidangan?.find((h) => h.kategori === 'Sayuran');
+  const sayurSiang = currentDayData?.sesi_makan?.siang?.hidangan?.find((h) => h.kategori === 'Sayuran');
+  const sayurMalam = currentDayData?.sesi_makan?.malam?.hidangan?.find((h) => h.kategori === 'Sayuran');
+
+  const isSayurPagiSiangSama = !!(sayurPagi && sayurSiang && sayurPagi.kode === sayurSiang.kode);
+  const isSayurMalamSama = !!(sayurMalam && sayurPagi && sayurMalam.kode === sayurPagi.kode);
 
   // Simpan password baru ke database
   const handleSaveSecurityPassword = async (e: React.FormEvent) => {
@@ -785,207 +811,397 @@ export default function DashboardPage() {
                   </div>
 
                   {/* 3 Meal Schedule Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                    
-                    {/* Card Pagi */}
-                    {(() => {
-                      const pagiSesi = currentDayData?.sesi_makan?.pagi;
-                      const pagiRecipe = pagiSesi?.hidangan?.[0]?.nama || 'Sayur Bening Bayam & Telur';
-                      const pagiCostNum =
-                        (pagiSesi as unknown as { estimasi_biaya_rp?: number })?.estimasi_biaya_rp ||
-                        pagiSesi?.hidangan?.reduce((acc, h) => acc + (h.biaya_per_porsi_rp || 0), 0) ||
-                        16000;
-                      const pagiCost = `Rp ${pagiCostNum.toLocaleString('id-ID')}`;
-                      const pagiPortion = getDynamicPortionString(pagiSesi?.porsi_per_anggota);
+                  {!currentDayData || !currentDayData.sesi_makan ? (
+                    <div className="bg-white rounded-3xl p-8 border border-stone-200 text-center flex flex-col items-center justify-center gap-3 mt-2 shadow-xs">
+                      <div className="w-16 h-16 rounded-full bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-3xl">
+                        🍲
+                      </div>
+                      <h3 className="font-extrabold text-[18px] text-[#0D0101]">Belum Ada Rencana Menu Masak</h3>
+                      <p className="text-[13px] text-stone-500 max-w-md">
+                        Susun rencana menu 7 hari keluarga Anda yang otomatis menghitung takaran porsi sesuai AKG dan estimasi belanja harian.
+                      </p>
+                      <Link
+                        href="/menu"
+                        className="mt-2 px-6 py-3 rounded-2xl bg-[#0C4B20] hover:bg-[#073214] text-white font-bold text-[14px] transition shadow-xs flex items-center gap-2"
+                      >
+                        <span>Buat Menu 7 Hari Sekarang</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-2">
+                      {/* Card Pagi */}
+                      {(() => {
+                        const pagiSesi = currentDayData.sesi_makan.pagi;
+                        if (!pagiSesi) return null;
 
-                      return (
-                        <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200">
-                          <div className="h-36 w-full relative bg-stone-100">
-                            <img
-                              className="w-full h-full object-cover"
-                              alt="Sarapan Pagi"
-                              src={pagiSesi?.hidangan?.[0]?.kode ? `/images/resep/${pagiSesi.hidangan[0].kode}.webp` : '/images/resep/RSP013.webp'}
-                            />
-                            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
-                              <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
-                              <span>SARAPAN • 06:30</span>
-                            </div>
-                          </div>
+                        const mainDish =
+                          pagiSesi.hidangan.find((h) => h.kategori === 'Lauk Hewani') ||
+                          pagiSesi.hidangan.find((h) => h.kategori === 'Sayuran') ||
+                          pagiSesi.hidangan[0];
+                        const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP013.webp';
+                        const pagiCostNum = pagiSesi.hidangan.reduce((acc, h) => {
+                          const totalPengali = pagiSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
+                          return acc + (h.biaya_per_porsi_rp || 0) * totalPengali;
+                        }, 0);
+                        const pagiCost = `Rp ${Math.round(pagiCostNum).toLocaleString('id-ID')}`;
+                        const pagiPortion = getDynamicPortionString(pagiSesi.porsi_per_anggota);
+                        const sayurDish = pagiSesi.hidangan.find((h) => h.kategori === 'Sayuran');
+                        const isSameVeg = isSayurPagiSiangSama && sayurDish;
 
-                          <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                            <div className="flex flex-col gap-1.5">
-                              <h3 className="font-bold text-[15px] text-[#0D0101] leading-snug">
-                                {pagiRecipe}
-                              </h3>
-                              <span className="text-[12px] text-[#0C4B20] font-bold">
-                                Est. Biaya: {pagiCost}
-                              </span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
-                                  Tinggi Zat Besi
+                        return (
+                          <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/90 justify-between">
+                            <div>
+                              {/* Hero Thumbnail */}
+                              <div className="h-40 w-full relative bg-stone-100">
+                                <img
+                                  className="w-full h-full object-cover"
+                                  alt="Sarapan Pagi"
+                                  src={fotoUrl}
+                                  loading="lazy"
+                                />
+                                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
+                                  <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
+                                  <span>SARAPAN • 06:30 WIB</span>
+                                </div>
+                                <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0C4B20] text-[11px] font-bold shadow-2xs font-mono">
+                                  Est. {pagiCost}
                                 </span>
-                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
-                                  Energi Seimbang
-                                </span>
+                              </div>
+
+                              {/* Content & Dish List */}
+                              <div className="p-4 sm:p-5 flex flex-col gap-3">
+                                {/* Badge Efisiensi Sayur Domestik */}
+                                {isSameVeg && (
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-200/80 self-start">
+                                    <span>🍲</span>
+                                    <span>Masak 1x (Porsi Pagi &amp; Siang)</span>
+                                  </div>
+                                )}
+
+                                <div>
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="font-extrabold text-[16px] text-[#0D0101]">
+                                      Sarapan Pagi
+                                    </h3>
+                                    <span className="text-[11px] font-bold text-[#6DA003] bg-[#F2F9EC] px-2 py-0.5 rounded-md">
+                                      30% AKG
+                                    </span>
+                                  </div>
+                                  <p className="text-[12px] text-stone-500 mt-0.5">
+                                    {pagiSesi.hidangan.length} hidangan bergizi seimbang
+                                  </p>
+                                </div>
+
+                                {/* List Masakan Rapi */}
+                                <div className="space-y-2 pt-1 border-t border-stone-100">
+                                  {pagiSesi.hidangan.map((dish) => (
+                                    <div
+                                      key={dish.kode}
+                                      className="flex items-center justify-between p-2 rounded-xl bg-stone-50 hover:bg-[#F2F9EC]/80 border border-stone-200/60 transition gap-2"
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <img
+                                          src={`/images/resep/${dish.kode}.webp`}
+                                          alt={dish.nama}
+                                          className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
+                                          loading="lazy"
+                                        />
+                                        <div className="min-w-0">
+                                          <span className="font-bold text-[13px] text-[#0D0101] truncate block">
+                                            {dish.nama}
+                                          </span>
+                                          <span className="text-[11px] text-[#737a65] block truncate">
+                                            {dish.kategori} • {dish.gizi_per_porsi.energi_kcal} kkal
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
+                                        Rp {dish.biaya_per_porsi_rp.toLocaleString('id-ID')}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedRecipe({
-                                  title: pagiRecipe,
-                                  session: 'SARAPAN • 06:30',
-                                  cost: pagiCost,
-                                  tags: ['Tinggi Zat Besi (Fe)', 'Kalsium Seimbang', 'Serat Pagi'],
-                                  portionDetail: pagiPortion,
-                                })
-                              }
-                              className="w-full mt-2 py-2 px-3 rounded-xl bg-stone-50 hover:bg-stone-100 text-[#0D0101] text-[12px] font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
-                            >
-                              <span>Lihat Resep &amp; Porsi</span>
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })()}
-
-                    {/* Card Siang */}
-                    {(() => {
-                      const siangSesi = currentDayData?.sesi_makan?.siang;
-                      const siangRecipe = siangSesi?.hidangan?.[0]?.nama || 'Ayam Ungkep Kuning & Tempe';
-                      const siangCostNum =
-                        (siangSesi as unknown as { estimasi_biaya_rp?: number })?.estimasi_biaya_rp ||
-                        siangSesi?.hidangan?.reduce((acc, h) => acc + (h.biaya_per_porsi_rp || 0), 0) ||
-                        32000;
-                      const siangCost = `Rp ${siangCostNum.toLocaleString('id-ID')}`;
-                      const siangPortion = getDynamicPortionString(siangSesi?.porsi_per_anggota);
-
-                      return (
-                        <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200">
-                          <div className="h-36 w-full relative bg-stone-100">
-                            <img
-                              className="w-full h-full object-cover"
-                              alt="Makan Siang"
-                              src={siangSesi?.hidangan?.[0]?.kode ? `/images/resep/${siangSesi.hidangan[0].kode}.webp` : '/images/resep/RSP008.webp'}
-                            />
-                            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
-                              <span className="w-2 h-2 rounded-full bg-[#6DA003]" />
-                              <span>MAKAN SIANG • 12:30</span>
+                            {/* Card Footer */}
+                            <div className="p-4 pt-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedRecipe({
+                                    title: 'Sarapan Pagi Keluarga',
+                                    session: 'SARAPAN PAGI • 06:30 WIB',
+                                    cost: pagiCost,
+                                    tags: ['Tinggi Zat Besi (Fe)', 'Kalsium Seimbang', 'Serat Pagi'],
+                                    portionDetail: pagiPortion,
+                                    dishes: pagiSesi.hidangan,
+                                  })
+                                }
+                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200 active:scale-98"
+                              >
+                                <span>Lihat Rincian Porsi &amp; Resep</span>
+                                <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
                             </div>
-                          </div>
+                          </article>
+                        );
+                      })()}
 
-                          <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                            <div className="flex flex-col gap-1.5">
-                              <h3 className="font-bold text-[15px] text-[#0D0101] leading-snug">
-                                {siangRecipe}
-                              </h3>
-                              <span className="text-[12px] text-[#0C4B20] font-bold">
-                                Est. Biaya: {siangCost}
-                              </span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
-                                  Protein Hewani &amp; Nabati
+                      {/* Card Siang */}
+                      {(() => {
+                        const siangSesi = currentDayData.sesi_makan.siang;
+                        if (!siangSesi) return null;
+
+                        const mainDish =
+                          siangSesi.hidangan.find((h) => h.kategori === 'Lauk Hewani') ||
+                          siangSesi.hidangan.find((h) => h.kategori === 'Sayuran') ||
+                          siangSesi.hidangan[0];
+                        const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP008.webp';
+                        const siangCostNum = siangSesi.hidangan.reduce((acc, h) => {
+                          const totalPengali = siangSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
+                          return acc + (h.biaya_per_porsi_rp || 0) * totalPengali;
+                        }, 0);
+                        const siangCost = `Rp ${Math.round(siangCostNum).toLocaleString('id-ID')}`;
+                        const siangPortion = getDynamicPortionString(siangSesi.porsi_per_anggota);
+                        const sayurDish = siangSesi.hidangan.find((h) => h.kategori === 'Sayuran');
+                        const isSameVeg = isSayurPagiSiangSama && sayurDish;
+
+                        return (
+                          <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/90 justify-between">
+                            <div>
+                              {/* Hero Thumbnail */}
+                              <div className="h-40 w-full relative bg-stone-100">
+                                <img
+                                  className="w-full h-full object-cover"
+                                  alt="Makan Siang"
+                                  src={fotoUrl}
+                                  loading="lazy"
+                                />
+                                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
+                                  <span className="w-2 h-2 rounded-full bg-[#6DA003]" />
+                                  <span>MAKAN SIANG • 12:30 WIB</span>
+                                </div>
+                                <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0C4B20] text-[11px] font-bold shadow-2xs font-mono">
+                                  Est. {siangCost}
                                 </span>
-                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
-                                  Zat Besi Heme
-                                </span>
+                              </div>
+
+                              {/* Content & Dish List */}
+                              <div className="p-4 sm:p-5 flex flex-col gap-3">
+                                {/* Badge Efisiensi Sayur Domestik */}
+                                {isSameVeg && (
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-[11px] font-bold border border-amber-200/80 self-start">
+                                    <span>🍲</span>
+                                    <span>Porsi Lanjutan Pagi (Tanpa Masak Ulang)</span>
+                                  </div>
+                                )}
+
+                                <div>
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="font-extrabold text-[16px] text-[#0D0101]">
+                                      Makan Siang
+                                    </h3>
+                                    <span className="text-[11px] font-bold text-[#6DA003] bg-[#F2F9EC] px-2 py-0.5 rounded-md">
+                                      40% AKG
+                                    </span>
+                                  </div>
+                                  <p className="text-[12px] text-stone-500 mt-0.5">
+                                    {siangSesi.hidangan.length} hidangan bergizi seimbang
+                                  </p>
+                                </div>
+
+                                {/* List Masakan Rapi */}
+                                <div className="space-y-2 pt-1 border-t border-stone-100">
+                                  {siangSesi.hidangan.map((dish) => (
+                                    <div
+                                      key={dish.kode}
+                                      className="flex items-center justify-between p-2 rounded-xl bg-stone-50 hover:bg-[#F2F9EC]/80 border border-stone-200/60 transition gap-2"
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <img
+                                          src={`/images/resep/${dish.kode}.webp`}
+                                          alt={dish.nama}
+                                          className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
+                                          loading="lazy"
+                                        />
+                                        <div className="min-w-0">
+                                          <span className="font-bold text-[13px] text-[#0D0101] truncate block">
+                                            {dish.nama}
+                                          </span>
+                                          <span className="text-[11px] text-stone-500 block truncate">
+                                            {dish.kategori} • {dish.gizi_per_porsi.energi_kcal} kkal
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
+                                        Rp {dish.biaya_per_porsi_rp.toLocaleString('id-ID')}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedRecipe({
-                                  title: siangRecipe,
-                                  session: 'MAKAN SIANG • 12:30',
-                                  cost: siangCost,
-                                  tags: ['Protein Tinggi', 'Asam Folat', 'Zinc'],
-                                  portionDetail: siangPortion,
-                                })
-                              }
-                              className="w-full mt-2 py-2 px-3 rounded-xl bg-stone-50 hover:bg-stone-100 text-[#0D0101] text-[12px] font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
-                            >
-                              <span>Lihat Resep &amp; Porsi</span>
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })()}
-
-                    {/* Card Malam */}
-                    {(() => {
-                      const malamSesi = currentDayData?.sesi_makan?.malam;
-                      const malamRecipe = malamSesi?.hidangan?.[0]?.nama || 'Sup Tahu Sutra & Tumis Sayur';
-                      const malamCostNum =
-                        (malamSesi as unknown as { estimasi_biaya_rp?: number })?.estimasi_biaya_rp ||
-                        malamSesi?.hidangan?.reduce((acc, h) => acc + (h.biaya_per_porsi_rp || 0), 0) ||
-                        22000;
-                      const malamCost = `Rp ${malamCostNum.toLocaleString('id-ID')}`;
-                      const malamPortion = getDynamicPortionString(malamSesi?.porsi_per_anggota);
-
-                      return (
-                        <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200">
-                          <div className="h-36 w-full relative bg-stone-100">
-                            <img
-                              className="w-full h-full object-cover"
-                              alt="Makan Malam"
-                              src={malamSesi?.hidangan?.[0]?.kode ? `/images/resep/${malamSesi.hidangan[0].kode}.webp` : '/images/resep/RSP010.webp'}
-                            />
-                            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
-                              <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
-                              <span>MAKAN MALAM • 18:30</span>
+                            {/* Card Footer */}
+                            <div className="p-4 pt-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedRecipe({
+                                    title: 'Makan Siang Keluarga',
+                                    session: 'MAKAN SIANG • 12:30 WIB',
+                                    cost: siangCost,
+                                    tags: ['Protein Tinggi Hewani & Nabati', 'Energi Siang Optimal', 'Zat Besi Heme'],
+                                    portionDetail: siangPortion,
+                                    dishes: siangSesi.hidangan,
+                                  })
+                                }
+                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200 active:scale-98"
+                              >
+                                <span>Lihat Rincian Porsi &amp; Resep</span>
+                                <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
                             </div>
-                          </div>
+                          </article>
+                        );
+                      })()}
 
-                          <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                            <div className="flex flex-col gap-1.5">
-                              <h3 className="font-bold text-[15px] text-[#0D0101] leading-snug">
-                                {malamRecipe}
-                              </h3>
-                              <span className="text-[12px] text-[#0C4B20] font-bold">
-                                Est. Biaya: {malamCost}
-                              </span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
-                                  Mudah Dicerna
+                      {/* Card Malam */}
+                      {(() => {
+                        const malamSesi = currentDayData.sesi_makan.malam;
+                        if (!malamSesi) return null;
+
+                        const mainDish =
+                          malamSesi.hidangan.find((h) => h.kategori === 'Lauk Hewani') ||
+                          malamSesi.hidangan.find((h) => h.kategori === 'Sayuran') ||
+                          malamSesi.hidangan[0];
+                        const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP010.webp';
+                        const malamCostNum = malamSesi.hidangan.reduce((acc, h) => {
+                          const totalPengali = malamSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
+                          return acc + (h.biaya_per_porsi_rp || 0) * totalPengali;
+                        }, 0);
+                        const malamCost = `Rp ${Math.round(malamCostNum).toLocaleString('id-ID')}`;
+                        const malamPortion = getDynamicPortionString(malamSesi.porsi_per_anggota);
+                        const sayurDish = malamSesi.hidangan.find((h) => h.kategori === 'Sayuran');
+
+                        return (
+                          <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/90 justify-between">
+                            <div>
+                              {/* Hero Thumbnail */}
+                              <div className="h-40 w-full relative bg-stone-100">
+                                <img
+                                  className="w-full h-full object-cover"
+                                  alt="Makan Malam"
+                                  src={fotoUrl}
+                                  loading="lazy"
+                                />
+                                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0D0101] text-[11px] font-bold shadow-2xs">
+                                  <span className="w-2 h-2 rounded-full bg-[#0C4B20]" />
+                                  <span>MAKAN MALAM • 18:30 WIB</span>
+                                </div>
+                                <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm text-[#0C4B20] text-[11px] font-bold shadow-2xs font-mono">
+                                  Est. {malamCost}
                                 </span>
-                                <span className="px-2 py-0.5 rounded-md bg-[#F2F9EC] text-[#0C4B20] text-[10px] font-bold">
-                                  Kalsium Tulang
-                                </span>
+                              </div>
+
+                              {/* Content & Dish List */}
+                              <div className="p-4 sm:p-5 flex flex-col gap-3">
+                                {/* Badge Efisiensi Sayur Domestik */}
+                                {sayurDish && (
+                                  isSayurMalamSama ? (
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-200/80 self-start">
+                                      <span>🍲</span>
+                                      <span>Masak 1x Seharian (Praktis)</span>
+                                    </div>
+                                  ) : (
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 text-[11px] font-bold border border-sky-200/80 self-start">
+                                      <span>🥬</span>
+                                      <span>Masak ke-2: Sayur Segar Malam</span>
+                                    </div>
+                                  )
+                                )}
+
+                                <div>
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="font-extrabold text-[16px] text-[#0D0101]">
+                                      Makan Malam
+                                    </h3>
+                                    <span className="text-[11px] font-bold text-[#6DA003] bg-[#F2F9EC] px-2 py-0.5 rounded-md">
+                                      30% AKG
+                                    </span>
+                                  </div>
+                                  <p className="text-[12px] text-stone-500 mt-0.5">
+                                    {malamSesi.hidangan.length} hidangan bergizi seimbang
+                                  </p>
+                                </div>
+
+                                {/* List Masakan Rapi */}
+                                <div className="space-y-2 pt-1 border-t border-stone-100">
+                                  {malamSesi.hidangan.map((dish) => (
+                                    <div
+                                      key={dish.kode}
+                                      className="flex items-center justify-between p-2 rounded-xl bg-stone-50 hover:bg-[#F2F9EC]/80 border border-stone-200/60 transition gap-2"
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <img
+                                          src={`/images/resep/${dish.kode}.webp`}
+                                          alt={dish.nama}
+                                          className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
+                                          loading="lazy"
+                                        />
+                                        <div className="min-w-0">
+                                          <span className="font-bold text-[13px] text-[#0D0101] truncate block">
+                                            {dish.nama}
+                                          </span>
+                                          <span className="text-[11px] text-stone-500 block truncate">
+                                            {dish.kategori} • {dish.gizi_per_porsi.energi_kcal} kkal
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
+                                        Rp {dish.biaya_per_porsi_rp.toLocaleString('id-ID')}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedRecipe({
-                                  title: malamRecipe,
-                                  session: 'MAKAN MALAM • 18:30',
-                                  cost: malamCost,
-                                  tags: ['Kalsium Ca', 'Serat Halus', 'Ramah Pencernaan'],
-                                  portionDetail: malamPortion,
-                                })
-                              }
-                              className="w-full mt-2 py-2 px-3 rounded-xl bg-stone-50 hover:bg-stone-100 text-[#0D0101] text-[12px] font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-stone-200"
-                            >
-                              <span>Lihat Resep &amp; Porsi</span>
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })()}
-
-                  </div>
+                            {/* Card Footer */}
+                            <div className="p-4 pt-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedRecipe({
+                                    title: 'Makan Malam Keluarga',
+                                    session: 'MAKAN MALAM • 18:30 WIB',
+                                    cost: malamCost,
+                                    tags: ['Ramah Pencernaan', 'Kalsium Tulang', 'Serat Halus'],
+                                    portionDetail: malamPortion,
+                                    dishes: malamSesi.hidangan,
+                                  })
+                                }
+                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200 active:scale-98"
+                              >
+                                <span>Lihat Rincian Porsi &amp; Resep</span>
+                                <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </section>
 
               </div>
@@ -1142,11 +1358,45 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div className="py-4 space-y-4 text-sm">
-              <div className="p-3.5 bg-[#F2F9EC] rounded-2xl border border-[#6DA003]/20">
-                <span className="text-[11px] text-[#0C4B20] block font-bold">Estimasi Biaya:</span>
+            <div className="py-4 space-y-4 text-sm max-h-[65vh] overflow-y-auto pr-1">
+              <div className="flex items-center justify-between p-3.5 bg-[#F2F9EC] rounded-2xl border border-[#6DA003]/20">
+                <span className="text-[12px] text-[#0C4B20] font-bold">Estimasi Biaya Sesi:</span>
                 <span className="text-[16px] font-extrabold text-[#0C4B20]">{selectedRecipe.cost}</span>
               </div>
+
+              {/* Rincian Hidangan Masakan */}
+              {selectedRecipe.dishes && selectedRecipe.dishes.length > 0 && (
+                <div>
+                  <span className="font-bold text-[#0D0101] block mb-2 text-xs uppercase tracking-wider text-stone-500">
+                    Hidangan dalam Sesi Ini ({selectedRecipe.dishes.length} Masakan):
+                  </span>
+                  <div className="space-y-2">
+                    {selectedRecipe.dishes.map((d: any) => (
+                      <div
+                        key={d.kode}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50 border border-stone-200/70 gap-2"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={`/images/resep/${d.kode}.webp`}
+                            alt={d.nama}
+                            className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
+                          />
+                          <div className="min-w-0">
+                            <h5 className="font-bold text-[13px] text-[#0D0101] truncate">{d.nama}</h5>
+                            <span className="text-[11px] text-stone-500 block truncate">
+                              {d.kategori} • {d.gizi_per_porsi?.energi_kcal} kkal
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
+                          Rp {d.biaya_per_porsi_rp?.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <span className="font-bold text-[#0D0101] block mb-1.5">Nilai Gizi Unggulan:</span>
@@ -1161,13 +1411,19 @@ export default function DashboardPage() {
 
               <div>
                 <span className="font-bold text-[#0D0101] block mb-1.5">Pembagian Porsi Keluarga ({userProfileName}):</span>
-                <p className="text-stone-700 leading-relaxed text-xs sm:text-sm bg-stone-50 p-3.5 rounded-xl border border-stone-200">
+                <div className="text-stone-700 leading-relaxed text-xs sm:text-sm bg-stone-50 p-3.5 rounded-xl border border-stone-200">
                   {selectedRecipe.portionDetail}
-                </p>
+                </div>
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end gap-2">
+            <div className="pt-3 border-t border-stone-200 flex items-center justify-between gap-2">
+              <Link
+                href="/menu"
+                className="text-[12px] font-bold text-[#0C4B20] hover:text-[#6DA003] transition flex items-center gap-1"
+              >
+                <span>Buka Kalender Menu 7 Hari →</span>
+              </Link>
               <button
                 type="button"
                 onClick={() => setSelectedRecipe(null)}
