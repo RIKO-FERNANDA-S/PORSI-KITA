@@ -194,12 +194,10 @@ export default function MenuPage() {
       setSelectedMemberTabId(a[0].id);
     }
 
-    // Sinkronisasi realtime tanggal & hari ini
+    // Sinkronisasi realtime tanggal & hari ini (Hari Ini adalah indeks 1 di posisi paling kiri)
     const now = new Date();
     setCurrentDate(now);
-    const dow = now.getDay();
-    const todayIndex = dow === 0 ? 7 : dow;
-    setSelectedDayIndex(todayIndex);
+    setSelectedDayIndex(1);
 
     setLoading(false);
 
@@ -214,9 +212,9 @@ export default function MenuPage() {
       .catch((err) => console.warn('Gagal memuat gambar resep database:', err));
   }, []);
 
-  // Hitung tanggal riil kalender berjalan (Senin s/d Minggu)
+  // Hitung tanggal riil kalender berjalan 7 hari ke depan mulai dari HARI INI (paling kiri)
   const calendarDays = useMemo<CalendarDayItem[]>(() => {
-    const dayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const monthNamesShort = [
       'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
       'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
@@ -225,41 +223,39 @@ export default function MenuPage() {
     if (!currentDate) {
       return [1, 2, 3, 4, 5, 6, 7].map((num) => ({
         hari_ke: num,
-        label: dayNames[num - 1],
-        shortLabel: dayNames[num - 1].slice(0, 3),
+        label: num === 1 ? 'Hari Ini' : `Hari ke-${num}`,
+        shortLabel: num === 1 ? 'Hari Ini' : `H+${num - 1}`,
         dateNum: num,
         dateFormatted: `Hari ${num}`,
-        fullDate: dayNames[num - 1],
-        isToday: false,
+        fullDate: num === 1 ? 'Hari Ini' : `Hari ke-${num}`,
+        isToday: num === 1,
       }));
     }
 
     const today = new Date(currentDate);
-    const dow = today.getDay();
-    const offsetToMonday = dow === 0 ? -6 : 1 - dow;
-
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + offsetToMonday);
-    monday.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
 
     return [1, 2, 3, 4, 5, 6, 7].map((num) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + (num - 1));
-      const dayName = dayNames[num - 1];
+      // num = 1 adalah Hari Ini (offset 0 hari, berada di bagian paling kiri)
+      const d = new Date(today);
+      d.setDate(today.getDate() + (num - 1));
+
+      const dayName = dayNames[d.getDay()];
       const dateNum = d.getDate();
       const monthShort = monthNamesShort[d.getMonth()];
-      const isToday =
-        d.getDate() === today.getDate() &&
-        d.getMonth() === today.getMonth() &&
-        d.getFullYear() === today.getFullYear();
+      const isToday = num === 1;
 
       return {
         hari_ke: num,
         label: dayName,
-        shortLabel: dayName.slice(0, 3),
+        shortLabel: isToday ? 'Hari Ini' : dayName.slice(0, 3),
         dateNum,
         dateFormatted: `${dateNum} ${monthShort}`,
-        fullDate: `${dayName}, ${dateNum} ${monthShort}`,
+        fullDate: isToday
+          ? `${dayName}, ${dateNum} ${monthShort} (Hari Ini)`
+          : num === 2
+          ? `${dayName}, ${dateNum} ${monthShort} (Besok)`
+          : `${dayName}, ${dateNum} ${monthShort}`,
         isToday,
       };
     });
@@ -443,6 +439,7 @@ export default function MenuPage() {
   // Active day data
   const activeDay =
     rencanaMenu.hari.find((h) => h.hari_ke === selectedDayIndex) || rencanaMenu.hari[0];
+  const activeCalDay = calendarDays.find((c) => c.hari_ke === selectedDayIndex);
   const activeSesi = activeDay.sesi_makan[activeMealTab];
 
   // Calculate session cost
@@ -632,13 +629,18 @@ export default function MenuPage() {
                 </div>
               </div>
 
-              {/* Tombol Panah Geser Hari Cepat (Mudah ditekan jari lansia) */}
+              {/* Tombol Panah Geser Hari Cepat (Hari sebelumnya dinonaktifkan jika sudah Hari Ini) */}
               <div className="flex items-center gap-2 self-end sm:self-center">
                 <button
                   type="button"
-                  onClick={() => setSelectedDayIndex((prev) => (prev > 1 ? prev - 1 : 7))}
-                  className="min-h-[48px] px-4 py-2.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-[#fff0ef] text-[#2c1514] font-bold text-[14px] flex items-center gap-2 transition active:scale-95 cursor-pointer"
-                  title="Ke hari sebelumnya"
+                  onClick={() => setSelectedDayIndex((prev) => Math.max(1, prev - 1))}
+                  disabled={selectedDayIndex <= 1}
+                  className={`min-h-[48px] px-4 py-2.5 rounded-xl border border-stone-200 text-[#2c1514] font-bold text-[14px] flex items-center gap-2 transition ${
+                    selectedDayIndex <= 1
+                      ? 'bg-stone-100/70 text-stone-300 border-stone-200/50 cursor-not-allowed opacity-50'
+                      : 'bg-stone-50 hover:bg-[#fff0ef] active:scale-95 cursor-pointer'
+                  }`}
+                  title={selectedDayIndex <= 1 ? 'Sudah berada di Hari Ini (hari sebelumnya tidak dapat dipilih)' : 'Ke hari sebelumnya'}
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -647,9 +649,14 @@ export default function MenuPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedDayIndex((prev) => (prev < 7 ? prev + 1 : 1))}
-                  className="min-h-[48px] px-4 py-2.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-[#fff0ef] text-[#2c1514] font-bold text-[14px] flex items-center gap-2 transition active:scale-95 cursor-pointer"
-                  title="Ke hari berikutnya"
+                  onClick={() => setSelectedDayIndex((prev) => Math.min(7, prev + 1))}
+                  disabled={selectedDayIndex >= 7}
+                  className={`min-h-[48px] px-4 py-2.5 rounded-xl border border-stone-200 text-[#2c1514] font-bold text-[14px] flex items-center gap-2 transition ${
+                    selectedDayIndex >= 7
+                      ? 'bg-stone-100/70 text-stone-300 border-stone-200/50 cursor-not-allowed opacity-50'
+                      : 'bg-stone-50 hover:bg-[#fff0ef] active:scale-95 cursor-pointer'
+                  }`}
+                  title={selectedDayIndex >= 7 ? 'Sudah mencapai hari ke-7' : 'Ke hari berikutnya'}
                 >
                   <span>Berikutnya</span>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -659,7 +666,7 @@ export default function MenuPage() {
               </div>
             </div>
 
-            {/* Strip 7 Hari (Diberi tanggal riil & target sentuh lega) */}
+            {/* Strip 7 Hari (Hari Ini paling kiri, hari sebelumnya tidak dapat dipilih) */}
             <nav aria-label="Jadwal Hari Mingguan" className="overflow-x-auto pb-1 scrollbar-none">
               <div className="grid grid-flow-col auto-cols-[minmax(120px,1fr)] sm:grid-cols-7 gap-2 min-w-full">
                 {rencanaMenu.hari.map((h) => {
@@ -684,7 +691,7 @@ export default function MenuPage() {
                           isActive ? 'text-[#b2f2b6]' : 'text-[#737a65]'
                         }`}
                       >
-                        {cal?.shortLabel || h.label_hari}
+                        {cal?.isToday ? 'Hari Ini' : cal?.label || h.label_hari}
                         {cal?.isToday && (
                           <span className="w-2 h-2 rounded-full bg-[#6da003]" title="Hari ini" />
                         )}
@@ -715,7 +722,7 @@ export default function MenuPage() {
             <div className="flex items-center justify-between px-2 pt-1 pb-0.5">
               <span className="text-[13px] font-bold text-[#2c1514] flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#6da003]" />
-                {activeDay.label_hari} • Hari ke-{activeDay.hari_ke}
+                {activeCalDay?.fullDate || `${activeDay.label_hari} • Hari ke-${activeDay.hari_ke}`}
               </span>
               <span className="text-[12px] font-semibold text-[#737a65]">
                 Total Hari Ini: <strong className="text-[#306a3b]">Rp {activeDay.total_biaya_hari_rp.toLocaleString('id-ID')}</strong> • {activeDay.skor_keluarga.skor_rata_rata}% AKG
@@ -1205,13 +1212,18 @@ export default function MenuPage() {
       {/* MOBILE THUMB-ZONE DOCK BAR (Khusus Ponsel & Ramah Lansia)  */}
       {/* ========================================================= */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-stone-200/90 px-3 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-2">
-        {/* Tombol Hari Sebelumnya */}
+        {/* Tombol Hari Sebelumnya (Nonaktif jika sudah Hari Ini) */}
         <button
           type="button"
-          onClick={() => setSelectedDayIndex((prev) => (prev > 1 ? prev - 1 : 7))}
-          className="min-h-[48px] w-12 rounded-xl bg-stone-100 hover:bg-[#fff0ef] text-[#2c1514] flex items-center justify-center font-bold transition active:scale-95 cursor-pointer border border-stone-200/60"
+          onClick={() => setSelectedDayIndex((prev) => Math.max(1, prev - 1))}
+          disabled={selectedDayIndex <= 1}
+          className={`min-h-[48px] w-12 rounded-xl border border-stone-200/60 flex items-center justify-center font-bold transition ${
+            selectedDayIndex <= 1
+              ? 'bg-stone-100/70 text-stone-300 cursor-not-allowed opacity-40'
+              : 'bg-stone-100 hover:bg-[#fff0ef] text-[#2c1514] active:scale-95 cursor-pointer'
+          }`}
           aria-label="Hari sebelumnya"
-          title="Hari sebelumnya"
+          title={selectedDayIndex <= 1 ? 'Sudah berada di Hari Ini' : 'Hari sebelumnya'}
         >
           <svg className="w-5 h-5 text-[#2c1514]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -1242,10 +1254,15 @@ export default function MenuPage() {
         {/* Tombol Hari Berikutnya */}
         <button
           type="button"
-          onClick={() => setSelectedDayIndex((prev) => (prev < 7 ? prev + 1 : 1))}
-          className="min-h-[48px] w-12 rounded-xl bg-stone-100 hover:bg-[#fff0ef] text-[#2c1514] flex items-center justify-center font-bold transition active:scale-95 cursor-pointer border border-stone-200/60"
+          onClick={() => setSelectedDayIndex((prev) => Math.min(7, prev + 1))}
+          disabled={selectedDayIndex >= 7}
+          className={`min-h-[48px] w-12 rounded-xl border border-stone-200/60 flex items-center justify-center font-bold transition ${
+            selectedDayIndex >= 7
+              ? 'bg-stone-100/70 text-stone-300 cursor-not-allowed opacity-40'
+              : 'bg-stone-100 hover:bg-[#fff0ef] text-[#2c1514] active:scale-95 cursor-pointer'
+          }`}
           aria-label="Hari berikutnya"
-          title="Hari berikutnya"
+          title={selectedDayIndex >= 7 ? 'Maksimal 7 hari ke depan' : 'Hari berikutnya'}
         >
           <svg className="w-5 h-5 text-[#2c1514]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
