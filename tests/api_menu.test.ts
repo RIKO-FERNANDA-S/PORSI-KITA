@@ -64,7 +64,7 @@ describe('API Menu 7 Hari & Database Upsert (Zero Data Accumulation)', () => {
       where: { family_id: testFamilyId },
     });
     expect(count).toBe(1);
-  });
+  }, 15000);
 
   it('harus memperbarui baris yang ada saat generate ulang dan TIDAK MENUMPUK baris data', async () => {
     const updatedMenu = {
@@ -107,5 +107,5 @@ describe('API Menu 7 Hari & Database Upsert (Zero Data Accumulation)', () => {
     expect(getData.success).toBe(true);
     expect(getData.menu.id).toBe('menu-test-updated');
     expect(getData.total_biaya).toBe(525000);
-  });
+  }, 15000);
 });

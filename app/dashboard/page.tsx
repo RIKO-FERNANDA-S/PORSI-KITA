@@ -4,7 +4,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { toast } from '../../components/ToastProvider';
-import { getStoredKeluarga, getStoredAnggota, getStoredMenu } from '../../lib/store';
+import {
+  getStoredKeluarga,
+  getStoredAnggota,
+  getStoredMenu,
+  getStoredKulkas,
+  saveStoredKulkas,
+  getStoredBelanjaChecked,
+  saveStoredBelanjaChecked,
+} from '../../lib/store';
 import { buatDaftarBelanjaMingguan } from '../../lib/planner/cost';
 import { RencanaMenu7Hari, MenuHari } from '../../lib/types';
 
@@ -13,6 +21,20 @@ interface ShoppingItem {
   name: string;
   price: number;
   checked: boolean;
+}
+
+// Icon lapak pasar tradisional (sinkron dengan app/belanja/[id])
+function getKategoriIcon(kategori: string) {
+  const lower = (kategori || '').toLowerCase();
+  if (lower.includes('sayur')) return '🥬';
+  if (lower.includes('daging') || lower.includes('ayam') || lower.includes('unggas') || lower.includes('sapi')) return '🥩';
+  if (lower.includes('ikan') || lower.includes('seafood') || lower.includes('udang') || lower.includes('laut')) return '🐟';
+  if (lower.includes('tahu') || lower.includes('tempe') || lower.includes('telur')) return '🥚';
+  if (lower.includes('bumbu') || lower.includes('rempah') || lower.includes('bawang') || lower.includes('cabai')) return '🧅';
+  if (lower.includes('pokok') || lower.includes('beras') || lower.includes('karbohidrat') || lower.includes('serealia')) return '🍚';
+  if (lower.includes('buah')) return '🍎';
+  if (lower.includes('susu') || lower.includes('minuman')) return '🥛';
+  return '🛒';
 }
 
 export default function DashboardPage() {
@@ -45,8 +67,13 @@ export default function DashboardPage() {
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetFeedback, setBudgetFeedback] = useState({ type: '', msg: '' });
   
-  // Shopping list state
-  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
+  // Shopping list state & sinkronisasi resep belanja (sama seperti app/belanja/[id])
+  const [periodeFilter, setPeriodeFilter] = useState<'hari_ini' | '3_hari' | '1_minggu'>('hari_ini');
+  const [fridgeMap, setFridgeMap] = useState<Record<string, boolean>>({});
+  const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
+  const [hideFridge, setHideFridge] = useState(false);
+  const [showRecipesDetail, setShowRecipesDetail] = useState(false);
+  const [customItems, setCustomItems] = useState<ShoppingItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [copiedWa, setCopiedWa] = useState(false);
 
@@ -98,18 +125,14 @@ export default function DashboardPage() {
       }
       if (storedMenu) {
         setRencanaMenu(storedMenu);
-        // Buat daftar belanja bahan dari menu aktif
-        if (storedMenu.hari && storedMenu.hari.length > 0) {
-          const rawItems = buatDaftarBelanjaMingguan(storedMenu.hari);
-          const initialItems: ShoppingItem[] = rawItems.slice(0, 8).map((it, idx) => ({
-            id: `item-${idx + 1}`,
-            name: `${it.nama_bahan} (${it.kebutuhan_beli_gram >= 1000 ? `${(it.kebutuhan_beli_gram / 1000).toFixed(1)} kg` : `${it.kebutuhan_beli_gram}g`})`,
-            price: it.estimasi_biaya_rp,
-            checked: idx < 2,
-          }));
-          setShoppingList(initialItems);
-        }
       }
+
+      // Restore preferensi stok kulkas & checklist
+      const storedFridge = getStoredKulkas();
+      setFridgeMap(storedFridge);
+
+      const storedChecked = getStoredBelanjaChecked();
+      setCheckedMap(storedChecked);
     } catch (e) {
       console.warn('Inisialisasi lokal fallback notice:', e);
     }
@@ -123,16 +146,6 @@ export default function DashboardPage() {
           try {
             localStorage.setItem('porsi_kita_rencana_menu_7hari', JSON.stringify(data.menu));
           } catch {}
-          if (data.menu.hari && data.menu.hari.length > 0) {
-            const rawItems = buatDaftarBelanjaMingguan(data.menu.hari);
-            const initialItems: ShoppingItem[] = rawItems.slice(0, 8).map((it, idx) => ({
-              id: `item-${idx + 1}`,
-              name: `${it.nama_bahan} (${it.kebutuhan_beli_gram >= 1000 ? `${(it.kebutuhan_beli_gram / 1000).toFixed(1)} kg` : `${it.kebutuhan_beli_gram}g`})`,
-              price: it.estimasi_biaya_rp,
-              checked: idx < 2,
-            }));
-            setShoppingList(initialItems);
-          }
         }
       })
       .catch((err) => console.warn('Gagal sinkronisasi menu dari database di dashboard:', err));
@@ -410,45 +423,230 @@ export default function DashboardPage() {
     }
   };
 
-  // Toggle checklist item
-  const handleToggleCheck = (id: string) => {
-    setShoppingList((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
-    );
+  // 1. Target hari menu masak (sinkron dengan pilihan periode & tab hari strip)
+  const targetHariList: MenuHari[] = useMemo(() => {
+    if (!rencanaMenu || !rencanaMenu.hari || rencanaMenu.hari.length === 0) return [];
+    if (periodeFilter === 'hari_ini') {
+      // Prioritaskan hari yang aktif dipilih di dashboard
+      const found = rencanaMenu.hari.find((h) => h.hari_ke === selectedDayIndex);
+      return found ? [found] : [rencanaMenu.hari[0]];
+    }
+    if (periodeFilter === '3_hari') {
+      return rencanaMenu.hari.slice(0, 3);
+    }
+    return rencanaMenu.hari.slice(0, 7);
+  }, [rencanaMenu, periodeFilter, selectedDayIndex]);
+
+  // 2. Daftar resep masakan yang dimasak pada target periode ini (sinkron dengan app/belanja/[id])
+  const resepDalamPeriode = useMemo(() => {
+    if (!targetHariList || targetHariList.length === 0) return [];
+    const map = new Map<string, { kode: string; nama: string; kategori: string }>();
+    for (const h of targetHariList) {
+      const sesiList = [h.sesi_makan?.pagi, h.sesi_makan?.siang, h.sesi_makan?.malam].filter(Boolean);
+      for (const s of sesiList) {
+        if (s && s.hidangan) {
+          for (const hid of s.hidangan) {
+            if (!map.has(hid.kode)) {
+              map.set(hid.kode, { kode: hid.kode, nama: hid.nama, kategori: hid.kategori });
+            }
+          }
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [targetHariList]);
+
+  // 3. Hitung bahan belanjaan murni dari resep masakan terpilih (sesuai faktor BDD Kemenkes & takaran keluarga)
+  const rawDaftarBelanja = useMemo(() => {
+    if (!targetHariList || targetHariList.length === 0) return [];
+    return buatDaftarBelanjaMingguan(targetHariList);
+  }, [targetHariList]);
+
+  // 4. Gabungkan bahan resep dengan status kulkas, checklist persisten, dan item titipan
+  const consolidatedList = useMemo(() => {
+    const list: Array<{
+      id: string;
+      kode_tkpi: string;
+      name: string;
+      nama_bahan: string;
+      kategori: string;
+      kebutuhan_beli_gram: number;
+      price: number;
+      checked: boolean;
+      isFridge: boolean;
+      isCustom: boolean;
+    }> = [];
+
+    for (const it of rawDaftarBelanja) {
+      const isFridge = !!fridgeMap[it.kode_tkpi];
+      const isChecked = !!checkedMap[it.kode_tkpi];
+      const gramStr =
+        it.kebutuhan_beli_gram >= 1000
+          ? `${(it.kebutuhan_beli_gram / 1000).toFixed(1)} kg`
+          : `${it.kebutuhan_beli_gram}g`;
+
+      list.push({
+        id: it.kode_tkpi,
+        kode_tkpi: it.kode_tkpi,
+        name: `${it.nama_bahan} (${gramStr})`,
+        nama_bahan: it.nama_bahan,
+        kategori: it.kategori,
+        kebutuhan_beli_gram: it.kebutuhan_beli_gram,
+        price: it.estimasi_biaya_rp,
+        checked: isChecked,
+        isFridge,
+        isCustom: false,
+      });
+    }
+
+    for (const ci of customItems) {
+      list.push({
+        id: ci.id,
+        kode_tkpi: ci.id,
+        name: ci.name,
+        nama_bahan: ci.name,
+        kategori: 'Titipan & Catatan',
+        kebutuhan_beli_gram: 0,
+        price: ci.price,
+        checked: ci.checked,
+        isFridge: false,
+        isCustom: true,
+      });
+    }
+
+    return list;
+  }, [rawDaftarBelanja, fridgeMap, checkedMap, customItems]);
+
+  // 5. Total penghematan kulkas & estimasi belanja pasar
+  const totalBiayaBelanjaPasar = useMemo(() => {
+    return consolidatedList
+      .filter((it) => !it.isFridge)
+      .reduce((sum, it) => sum + it.price, 0);
+  }, [consolidatedList]);
+
+  const totalHematKulkas = useMemo(() => {
+    return consolidatedList
+      .filter((it) => it.isFridge && !it.isCustom)
+      .reduce((sum, it) => sum + it.price, 0);
+  }, [consolidatedList]);
+
+  const jumlahBahanKulkas = useMemo(() => {
+    return consolidatedList.filter((it) => it.isFridge && !it.isCustom).length;
+  }, [consolidatedList]);
+
+  const displayedShoppingList = useMemo(() => {
+    if (hideFridge) {
+      return consolidatedList.filter((it) => !it.isFridge);
+    }
+    return consolidatedList;
+  }, [consolidatedList, hideFridge]);
+
+  // Alias untuk kompatibilitas
+  const shoppingList = displayedShoppingList;
+  const totalBelanjaEstimasi = totalBiayaBelanjaPasar;
+
+  // Toggle checklist beli (tersimpan persisten dan sinkron dengan app/belanja/[id])
+  const handleToggleCheck = (id: string, isCustom = false) => {
+    if (isCustom) {
+      setCustomItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
+      );
+      return;
+    }
+
+    setCheckedMap((prev) => {
+      const next = {
+        ...prev,
+        [id]: !prev[id],
+      };
+      saveStoredBelanjaChecked(next);
+      return next;
+    });
   };
 
-  // Tambah item belanja cepat
+  // Toggle status stok di kulkas (tersimpan persisten dan sinkron dengan app/belanja/[id])
+  const handleToggleFridge = (e: React.MouseEvent, kodeTkpi: string) => {
+    e.stopPropagation();
+    setFridgeMap((prev) => {
+      const nextVal = !prev[kodeTkpi];
+      const nextMap = { ...prev, [kodeTkpi]: nextVal };
+      saveStoredKulkas(nextMap);
+
+      if (nextVal) {
+        toast.success('Bahan ditandai ada di Kulkas. Estimasi belanja pasar otomatis lebih hemat!');
+      } else {
+        toast.info('Bahan dikembalikan ke daftar belanja pasar.');
+      }
+      return nextMap;
+    });
+  };
+
+  // Tambah item catatan titipan cepat
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemText.trim()) return;
     const newItem: ShoppingItem = {
-      id: Date.now().toString(),
+      id: `custom-${Date.now()}`,
       name: newItemText.trim(),
       price: 0,
       checked: false,
     };
-    setShoppingList((prev) => [...prev, newItem]);
+    setCustomItems((prev) => [...prev, newItem]);
     setNewItemText('');
+    toast.success(`Catatan titipan "${newItem.name}" ditambahkan.`);
   };
 
-  // Salin daftar belanja ke format WhatsApp
+  // Salin format WhatsApp (lengkap dengan resep masakan & status kulkas)
   const handleCopyWhatsApp = () => {
+    const periodeJudul =
+      periodeFilter === 'hari_ini'
+        ? `HARI INI (${currentDayItem?.fullDateFormatted || `Hari ke-${selectedDayIndex}`})`
+        : periodeFilter === '3_hari'
+        ? '3 HARI KEDEPAN'
+        : '1 MINGGU (7 HARI)';
+
+    const nonFridgeItems = displayedShoppingList.filter((it) => !it.isFridge);
+
     const lines = [
-      `🛒 *Daftar Belanja Bahan - Porsi Kita*`,
+      `🛒 *DAFTAR BELANJA PASAR - PORSI KITA*`,
       `Keluarga: *${userProfileName}*`,
       `Wilayah / Pasar: ${wilayahName}`,
-      `Hari: ${currentDayItem?.fullDateFormatted || currentDayData?.label_hari || `Hari ke-${selectedDayIndex}`}`,
+      `Periode: *${periodeJudul}*`,
       '--------------------------------',
-      ...shoppingList.map(
-        (it) => `${it.checked ? '✅' : '◻️'} ${it.name} ${it.price > 0 ? `(Rp ${it.price.toLocaleString('id-ID')})` : ''}`
-      ),
+      `🍳 *Resep Masakan (${resepDalamPeriode.length} Menu):*`,
+      ...resepDalamPeriode.map((r) => `  • ${r.nama} (${r.kategori})`),
       '--------------------------------',
-      `*Total Estimasi: Rp ${shoppingList.reduce((acc, curr) => acc + curr.price, 0).toLocaleString('id-ID')}*`,
-      'Disusun otomatis dengan takaran gizi pas sekeluarga.',
+      `📍 *Bahan yang Harus Dibeli di Pasar:*`,
+      ...(nonFridgeItems.length > 0
+        ? nonFridgeItems.map(
+            (it) =>
+              `${it.checked ? '✅' : '◻️'} ${getKategoriIcon(it.kategori)} ${it.name} ${
+                it.price > 0 ? `(~Rp ${it.price.toLocaleString('id-ID')})` : ''
+              }`
+          )
+        : ['  (Semua bahan sudah tersedia di kulkas / belum ada catatan)']),
     ];
+
+    if (totalHematKulkas > 0) {
+      lines.push('--------------------------------');
+      lines.push(`🧊 *Bahan Sudah di Kulkas (Hemat Rp ${totalHematKulkas.toLocaleString('id-ID')}):*`);
+      const kulkasItems = consolidatedList.filter((it) => it.isFridge && !it.isCustom);
+      kulkasItems.forEach((it) => {
+        lines.push(`  • 🧊 ${it.name} (Hemat Rp ${it.price.toLocaleString('id-ID')})`);
+      });
+    }
+
+    lines.push('--------------------------------');
+    lines.push(`*Total Estimasi Belanja Pasar: Rp ${totalBiayaBelanjaPasar.toLocaleString('id-ID')}*`);
+    if (totalHematKulkas > 0) {
+      lines.push(`*Total Penghematan Kulkas: Rp ${totalHematKulkas.toLocaleString('id-ID')}*`);
+    }
+    lines.push('Disusun otomatis sesuai resep menu & takaran gizi pas sekeluarga.');
+
     const textToCopy = lines.join('\n');
     navigator.clipboard.writeText(textToCopy);
     setCopiedWa(true);
+    toast.success('Daftar belanja tersinkron berhasil disalin ke WhatsApp!');
     setTimeout(() => setCopiedWa(false), 2500);
   };
 
@@ -536,8 +734,6 @@ export default function DashboardPage() {
       setBudgetSaving(false);
     }
   };
-
-  const totalBelanjaEstimasi = shoppingList.reduce((acc, it) => acc + it.price, 0);
 
   return (
     <div className="bg-[#FAFAFA] font-sans text-[#0D0101] min-h-screen selection:bg-[#6DA003]/30">
@@ -1207,13 +1403,13 @@ export default function DashboardPage() {
 
               </div>
 
-              {/* RIGHT COLUMN: WIDGET DAFTAR BELANJA PASAR (4 Kolom) */}
+              {/* RIGHT COLUMN: WIDGET DAFTAR BELANJA PASAR (4 Kolom - Tersinkronisasi Resep) */}
               <aside
                 id="shopping-list-section"
-                className="lg:col-span-4 flex flex-col gap-4 rounded-3xl p-6 shadow-xs border border-stone-200 bg-white"
+                className="lg:col-span-4 flex flex-col gap-4 rounded-3xl p-5 sm:p-6 shadow-xs border border-stone-200 bg-white"
               >
                 {/* Header Widget */}
-                <div className="flex items-start justify-between pb-2 border-b border-stone-100">
+                <div className="flex items-start justify-between pb-3 border-b border-stone-100">
                   <div className="flex items-center gap-3">
                     <div
                       className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-2xs"
@@ -1231,49 +1427,180 @@ export default function DashboardPage() {
 
                   <div className="text-right">
                     <span className="text-[10px] text-stone-500 uppercase tracking-wider block font-bold">
-                      Estimasi
+                      Est. Pasar
                     </span>
-                    <span className="text-[15px] font-extrabold text-[#0C4B20] tabular-nums">
-                      Rp {totalBelanjaEstimasi.toLocaleString('id-ID')}
+                    <span className="text-[15px] font-extrabold text-[#0C4B20] tabular-nums font-mono">
+                      Rp {totalBiayaBelanjaPasar.toLocaleString('id-ID')}
                     </span>
                   </div>
                 </div>
 
-                {/* Checklist Items */}
-                <div className="flex flex-col gap-2 mt-1">
-                  {shoppingList.map((item) => (
-                    <label
-                      key={item.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50/80 hover:bg-stone-100 cursor-pointer transition-all border border-stone-200/60"
+                {/* Segmented Filter Periode Belanja Resep (Sama seperti app/belanja/[id]) */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                      Kebutuhan Resep Masakan
+                    </span>
+                    <span className="text-[11px] text-[#0C4B20] font-semibold">
+                      {periodeFilter === 'hari_ini' ? '1 Hari' : periodeFilter === '3_hari' ? '3 Hari' : '7 Hari'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 p-1 bg-stone-100 rounded-2xl border border-stone-200/80">
+                    <button
+                      type="button"
+                      onClick={() => setPeriodeFilter('hari_ini')}
+                      className={`min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
+                        periodeFilter === 'hari_ini'
+                          ? 'bg-[#0C4B20] text-white shadow-2xs'
+                          : 'text-stone-600 hover:text-stone-900'
+                      }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={item.checked}
-                          onChange={() => handleToggleCheck(item.id)}
-                          className="w-4 h-4 rounded text-[#0C4B20] focus:ring-0 accent-[#6DA003] cursor-pointer"
-                        />
+                      {selectedDayIndex === 1 ? 'Hari Ini' : `Hari ke-${selectedDayIndex}`}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodeFilter('3_hari')}
+                      className={`min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
+                        periodeFilter === '3_hari'
+                          ? 'bg-[#0C4B20] text-white shadow-2xs'
+                          : 'text-stone-600 hover:text-stone-900'
+                      }`}
+                    >
+                      3 Hari
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodeFilter('1_minggu')}
+                      className={`min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
+                        periodeFilter === '1_minggu'
+                          ? 'bg-[#0C4B20] text-white shadow-2xs'
+                          : 'text-stone-600 hover:text-stone-900'
+                      }`}
+                    >
+                      1 Minggu
+                    </button>
+                  </div>
+                </div>
+
+                {/* Resep Masakan Yang Dimasak (Accordion) */}
+                <div className="bg-[#F2F9EC] rounded-2xl p-3 border border-[#6DA003]/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🍳</span>
+                      <span className="text-[12px] font-bold text-[#0C4B20]">
+                        Menu Masakan ({resepDalamPeriode.length} Hidangan)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowRecipesDetail(!showRecipesDetail)}
+                      className="text-[11px] font-bold text-[#0C4B20] hover:text-[#6DA003] px-2 py-0.5 rounded-lg bg-white border border-stone-200/80 cursor-pointer shadow-2xs transition"
+                    >
+                      {showRecipesDetail ? 'Tutup ▲' : 'Lihat Resep ▼'}
+                    </button>
+                  </div>
+
+                  {showRecipesDetail && (
+                    <div className="pt-2 mt-2 border-t border-[#6DA003]/20 flex flex-wrap gap-1.5 animate-fadeIn">
+                      {resepDalamPeriode.map((r) => (
                         <span
-                          className={`text-[13px] transition-colors ${
-                            item.checked
-                              ? 'line-through text-stone-400'
-                              : 'text-[#0D0101] font-semibold'
-                          }`}
+                          key={r.kode}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-[#0D0101] border border-stone-200/80 shadow-2xs"
                         >
-                          {item.name}
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#6DA003]" />
+                          {r.nama}
                         </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Filter Kulkas Bar & Penghematan */}
+                <div className="flex items-center justify-between text-xs px-1 gap-2 flex-wrap">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-stone-600 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={hideFridge}
+                      onChange={(e) => setHideFridge(e.target.checked)}
+                      className="w-3.5 h-3.5 text-[#0C4B20] rounded focus:ring-0 accent-[#6DA003] cursor-pointer"
+                    />
+                    <span>Sembunyikan Kulkas ({jumlahBahanKulkas})</span>
+                  </label>
+                  {totalHematKulkas > 0 && (
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200/80">
+                      Hemat Rp {totalHematKulkas.toLocaleString('id-ID')}
+                    </span>
+                  )}
+                </div>
+
+                {/* Checklist Items */}
+                <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                  {displayedShoppingList.length === 0 ? (
+                    <div className="py-6 text-center text-stone-400 text-xs font-medium">
+                      Semua bahan sudah tersedia di kulkas atau belum ada rencana menu.
+                    </div>
+                  ) : (
+                    displayedShoppingList.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`flex items-center justify-between p-2.5 rounded-xl transition-all border ${
+                          item.checked
+                            ? 'bg-stone-50 border-stone-200/50 opacity-60'
+                            : item.isFridge
+                            ? 'bg-blue-50/50 border-blue-200/60'
+                            : 'bg-stone-50/80 hover:bg-stone-100 border-stone-200/60'
+                        }`}
+                      >
+                        <label className="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={item.checked}
+                            onChange={() => handleToggleCheck(item.id, item.isCustom)}
+                            className="w-4 h-4 rounded text-[#0C4B20] focus:ring-0 accent-[#6DA003] cursor-pointer shrink-0"
+                          />
+                          <span className="text-sm shrink-0">
+                            {getKategoriIcon(item.kategori)}
+                          </span>
+                          <span
+                            className={`text-[13px] truncate transition-colors ${
+                              item.checked
+                                ? 'line-through text-stone-400'
+                                : 'text-[#0D0101] font-semibold'
+                            }`}
+                          >
+                            {item.name}
+                          </span>
+                        </label>
+
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          {!item.isCustom && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleFridge(e, item.kode_tkpi)}
+                              title={item.isFridge ? 'Hapus dari stok kulkas' : 'Tandai sudah ada di kulkas'}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer ${
+                                item.isFridge
+                                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                  : 'bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800'
+                              }`}
+                            >
+                              {item.isFridge ? '🧊 Di Kulkas' : '+ Kulkas'}
+                            </button>
+                          )}
+
+                          {item.price > 0 && (
+                            <span
+                              className={`text-[11px] tabular-nums font-mono ${
+                                item.checked || item.isFridge ? 'text-stone-400 line-through' : 'text-[#0C4B20] font-bold'
+                              }`}
+                            >
+                              Rp {item.price.toLocaleString('id-ID')}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {item.price > 0 && (
-                        <span
-                          className={`text-[11px] tabular-nums ${
-                            item.checked ? 'text-stone-400 line-through' : 'text-[#0C4B20] font-bold'
-                          }`}
-                        >
-                          Rp {item.price.toLocaleString('id-ID')}
-                        </span>
-                      )}
-                    </label>
-                  ))}
+                    ))
+                  )}
                 </div>
 
                 {/* Quick Add Input Form */}
@@ -1325,7 +1652,7 @@ export default function DashboardPage() {
                   </button>
 
                   <Link
-                    href="/belanja"
+                    href={`/belanja/${rencanaMenu?.id || 'aktif'}`}
                     className="w-full py-2.5 px-4 rounded-xl bg-stone-100 hover:bg-stone-200 text-[#0C4B20] text-center font-bold text-xs transition cursor-pointer"
                   >
                     Buka Checklist Pasar Lengkap (Lapak &amp; Kulkas) →

@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toast } from '../components/ToastProvider';
-import { getStoredPantangan, saveStoredPantangan } from '../lib/store';
+import {
+  getStoredPantangan,
+  saveStoredPantangan,
+  getStoredKulkas,
+  saveStoredKulkas,
+  getStoredBelanjaChecked,
+  saveStoredBelanjaChecked,
+} from '../lib/store';
+import { generateMenu } from '../lib/planner/generate';
+import { buatDaftarBelanjaMingguan } from '../lib/planner/cost';
+import { Anggota } from '../lib/types';
 
 describe('Sistem Alert Animasi & Pop-Up Konfirmasi Logout', () => {
   let dispatchedEvents: CustomEvent[] = [];
@@ -165,5 +175,79 @@ describe('Sistem Alert Animasi & Pop-Up Konfirmasi Logout', () => {
     const reloadedAfterDelete = getStoredPantangan();
     expect(reloadedAfterDelete).not.toContain('Kacang-kacangan');
     expect(reloadedAfterDelete).toContain('Telur Ayam');
+  });
+
+  it('9. Sinkronisasi bahan belanjaan sesuai resep masakan yang dimasak (1 Hari, 3 Hari, 1 Minggu)', () => {
+    const dummyAnggota: Anggota[] = [
+      { id: 'a1', alias: 'Ayah', usia_tahun: 35, jenis_kelamin: 'L', status: 'umum', alergen: [] },
+      { id: 'a2', alias: 'Ibu', usia_tahun: 30, jenis_kelamin: 'P', status: 'umum', alergen: [] },
+    ];
+    const menu = generateMenu({
+      familyId: 'fam-test-sync',
+      familyName: 'Keluarga Test',
+      budgetHarianRp: 80000,
+      anggota: dummyAnggota,
+    });
+
+    expect(menu.hari.length).toBe(7);
+
+    // Kebutuhan bahan 1 Hari (Hari ke-1)
+    const bahanHari1 = buatDaftarBelanjaMingguan(menu.hari.slice(0, 1));
+    expect(bahanHari1.length).toBeGreaterThan(0);
+
+    // Kebutuhan bahan 3 Hari
+    const bahan3Hari = buatDaftarBelanjaMingguan(menu.hari.slice(0, 3));
+    expect(bahan3Hari.length).toBeGreaterThanOrEqual(bahanHari1.length);
+
+    // Kebutuhan bahan 7 Hari (1 Minggu)
+    const bahan7Hari = buatDaftarBelanjaMingguan(menu.hari.slice(0, 7));
+    expect(bahan7Hari.length).toBeGreaterThanOrEqual(bahan3Hari.length);
+
+    // Subtotal biaya harus bertambah secara proporsional sesuai jumlah hari resep
+    const totalHari1 = bahanHari1.reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
+    const total3Hari = bahan3Hari.reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
+    const total7Hari = bahan7Hari.reduce((sum, it) => sum + it.estimasi_biaya_rp, 0);
+
+    expect(total3Hari).toBeGreaterThan(totalHari1);
+    expect(total7Hari).toBeGreaterThan(total3Hari);
+  });
+
+  it('10. Sinkronisasi stok kulkas & checklist belanja persisten antara Dashboard dan Halaman Belanja', () => {
+    const mockStorage: Record<string, string> = {};
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, val: string) => {
+        mockStorage[key] = val;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    });
+
+    // 1. Simpan stok kulkas dari Dashboard atau Halaman Belanja
+    const initialFridge: Record<string, boolean> = {
+      TK001: true,
+      TK002: true,
+    };
+    saveStoredKulkas(initialFridge);
+
+    // 2. Baca kembali dan verifikasi konsistensi data
+    const loadedFridge = getStoredKulkas();
+    expect(loadedFridge['TK001']).toBe(true);
+    expect(loadedFridge['TK002']).toBe(true);
+    expect(loadedFridge['TK003']).toBeUndefined();
+
+    // 3. Simpan checklist belanja dari salah satu halaman
+    const checkedData: Record<string, boolean> = {
+      TK001: true,
+      TK005: true,
+    };
+    saveStoredBelanjaChecked(checkedData);
+
+    // 4. Pastikan checklist terbaca sama persis di halaman lain
+    const loadedChecked = getStoredBelanjaChecked();
+    expect(loadedChecked['TK001']).toBe(true);
+    expect(loadedChecked['TK005']).toBe(true);
+    expect(loadedChecked['TK002']).toBeUndefined();
   });
 });

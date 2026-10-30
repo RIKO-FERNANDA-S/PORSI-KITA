@@ -6,7 +6,16 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '../../../components/Sidebar';
 import { toast } from '../../../components/ToastProvider';
 import { ItemDaftarBelanja, RencanaMenu7Hari, Keluarga, Anggota } from '../../../lib/types';
-import { getStoredMenu, getStoredKeluarga, getStoredAnggota, saveStoredMenu } from '../../../lib/store';
+import {
+  getStoredMenu,
+  getStoredKeluarga,
+  getStoredAnggota,
+  saveStoredMenu,
+  getStoredKulkas,
+  saveStoredKulkas,
+  getStoredBelanjaChecked,
+  saveStoredBelanjaChecked,
+} from '../../../lib/store';
 import { buatDaftarBelanjaMingguan } from '../../../lib/planner/cost';
 
 interface TitipanItem {
@@ -134,13 +143,7 @@ function BelanjaContent({ params }: PageProps) {
           setDaftarBelanja(items);
 
           // Restore preferensi stok kulkas dari localStorage atau gunakan default awet
-          let initialFridge: Record<string, boolean> = {};
-          try {
-            const rawF = localStorage.getItem(STORAGE_KEY_KULKAS);
-            if (rawF) {
-              initialFridge = JSON.parse(rawF);
-            }
-          } catch {}
+          let initialFridge = getStoredKulkas();
 
           if (Object.keys(initialFridge).length === 0) {
             items.forEach((it) => {
@@ -155,12 +158,14 @@ function BelanjaContent({ params }: PageProps) {
                 initialFridge[it.kode_tkpi] = true;
               }
             });
-            try {
-              localStorage.setItem(STORAGE_KEY_KULKAS, JSON.stringify(initialFridge));
-            } catch {}
+            saveStoredKulkas(initialFridge);
           }
 
           setFridgeMap(initialFridge);
+
+          // Restore preferensi checklist belanja
+          const initialChecked = getStoredBelanjaChecked();
+          setCheckedMap(initialChecked);
         }
       } catch (e) {
         console.error('Gagal memuat data belanja:', e);
@@ -328,10 +333,14 @@ function BelanjaContent({ params }: PageProps) {
 
   // Toggle checklist beli per item
   const toggleCheck = (kodeTkpi: string) => {
-    setCheckedMap((prev) => ({
-      ...prev,
-      [kodeTkpi]: !prev[kodeTkpi],
-    }));
+    setCheckedMap((prev) => {
+      const next = {
+        ...prev,
+        [kodeTkpi]: !prev[kodeTkpi],
+      };
+      saveStoredBelanjaChecked(next);
+      return next;
+    });
   };
 
   // Tandai seluruh item dalam 1 lapak sebagai dibeli / belum
@@ -345,6 +354,7 @@ function BelanjaContent({ params }: PageProps) {
       nextMap[it.kode_tkpi] = !allChecked;
     });
     setCheckedMap(nextMap);
+    saveStoredBelanjaChecked(nextMap);
     showToast(
       allChecked
         ? 'Semua bahan di lapak ini ditandai belum dibeli.'
@@ -358,9 +368,7 @@ function BelanjaContent({ params }: PageProps) {
     setFridgeMap((prev) => {
       const next = !prev[kodeTkpi];
       const updated = { ...prev, [kodeTkpi]: next };
-      try {
-        localStorage.setItem(STORAGE_KEY_KULKAS, JSON.stringify(updated));
-      } catch {}
+      saveStoredKulkas(updated);
 
       showToast(
         next

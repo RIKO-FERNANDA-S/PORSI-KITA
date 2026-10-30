@@ -8,6 +8,8 @@ const STORAGE_KEY_ANGGOTA = 'porsi_kita_anggota';
 const STORAGE_KEY_MENU = 'porsi_kita_menu_aktif';
 const STORAGE_KEY_ONBOARDED = 'porsi_kita_onboarded';
 const STORAGE_KEY_PANTANGAN = 'porsi_kita_pantangan_keluarga';
+export const STORAGE_KEY_KULKAS = 'porsi_kita_kulkas_stok';
+export const STORAGE_KEY_BELANJA_CHECKED = 'porsi_kita_belanja_checked';
 
 // Profil default Bu Sari untuk demonstrasi langsung (PRD 4.0)
 export const DEFAULT_KELUARGA: Keluarga = {
@@ -178,6 +180,40 @@ export function saveStoredPantangan(list: string[]) {
   } catch {}
 }
 
+export function getStoredKulkas(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_KULKAS);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveStoredKulkas(map: Record<string, boolean>) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_KULKAS, JSON.stringify(map));
+  } catch {}
+}
+
+export function getStoredBelanjaChecked(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_BELANJA_CHECKED);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveStoredBelanjaChecked(map: Record<string, boolean>) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_BELANJA_CHECKED, JSON.stringify(map));
+  } catch {}
+}
+
 export function resetDemoState() {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(STORAGE_KEY_KELUARGA);
@@ -185,4 +221,6 @@ export function resetDemoState() {
   localStorage.removeItem(STORAGE_KEY_MENU);
   localStorage.removeItem(STORAGE_KEY_ONBOARDED);
   localStorage.removeItem(STORAGE_KEY_PANTANGAN);
+  localStorage.removeItem(STORAGE_KEY_KULKAS);
+  localStorage.removeItem(STORAGE_KEY_BELANJA_CHECKED);
 }
