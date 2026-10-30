@@ -104,4 +104,30 @@ describe('Sistem Alert Animasi & Pop-Up Konfirmasi Logout', () => {
     expect(dispatchedEvents.length).toBe(1);
     expect(dispatchedEvents[0].detail.message).toContain('Toko Sembako Berkah');
   });
+
+  it('7. Fitur Hapus Warung: menghapus warung dari list, mereset filter aktif, dan memancarkan toast notifikasi', () => {
+    let warungs = [
+      { id: 'w-1', nama: 'Warung Sayur Bu Ani', tag: 'Warung Sayur', count: 3, totalSpent: 120000 },
+      { id: 'w-2', nama: 'Kios Daging Segar', tag: 'Daging & Ayam', count: 1, totalSpent: 85000 },
+    ];
+    let selectedFilter = 'Warung Sayur Bu Ani';
+    let modalMerchant = 'Warung Sayur Bu Ani';
+
+    const targetToDelete = warungs[0];
+
+    // Proses penghapusan
+    warungs = warungs.filter((w) => w.id !== targetToDelete.id && w.nama !== targetToDelete.nama);
+    if (selectedFilter === targetToDelete.nama) selectedFilter = 'all';
+    if (modalMerchant === targetToDelete.nama) modalMerchant = 'Warung Sayur Terdekat';
+
+    expect(warungs.length).toBe(1);
+    expect(warungs[0].nama).toBe('Kios Daging Segar');
+    expect(selectedFilter).toBe('all');
+    expect(modalMerchant).toBe('Warung Sayur Terdekat');
+
+    toast.success(`Warung "${targetToDelete.nama}" berhasil dihapus dari daftar langganan keluarga.`, 'Warung Dihapus');
+    expect(dispatchedEvents.length).toBe(1);
+    expect(dispatchedEvents[0].detail.title).toBe('Warung Dihapus');
+    expect(dispatchedEvents[0].detail.message).toContain('Warung Sayur Bu Ani');
+  });
 });

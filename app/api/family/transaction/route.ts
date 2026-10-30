@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Dukungan pendaftaran warung langganan baru tanpa transaksi
-    if (action === 'add_warung' || (!nominal && (merchant || nama_warung))) {
+    if (action === 'add_warung' || (!nominal && (merchant || nama_warung) && action !== 'delete_warung')) {
       const warungName = (merchant || nama_warung || '').trim();
       if (!warungName) {
         return NextResponse.json({ error: 'Nama warung tidak boleh kosong' }, { status: 400 });
@@ -174,6 +174,33 @@ export async function POST(req: NextRequest) {
           count: 0,
           totalSpent: 0,
         },
+      });
+    }
+
+    // Dukungan penghapusan warung langganan
+    if (action === 'delete_warung') {
+      const targetId = body.warung_id || body.id;
+      const targetName = (body.nama_warung || body.nama || merchant || '').trim();
+
+      if (!targetId && !targetName) {
+        return NextResponse.json(
+          { error: 'ID atau nama warung harus disertakan.' },
+          { status: 400 }
+        );
+      }
+
+      await prisma.warung.deleteMany({
+        where: {
+          OR: [
+            ...(targetId ? [{ id: targetId }] : []),
+            ...(targetName ? [{ nama_warung: targetName, family_id: family.id }] : []),
+          ],
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Warung berhasil dihapus dari database.',
       });
     }
 
@@ -304,6 +331,54 @@ export async function PUT(req: NextRequest) {
     console.error('Error update transaction:', err);
     return NextResponse.json(
       { error: err.message || 'Gagal memperbarui transaksi.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE: Menghapus warung langganan dari database.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const url = req.nextUrl;
+    const urlWarungId = url.searchParams.get('warung_id') || url.searchParams.get('id');
+    const urlNama = url.searchParams.get('nama') || url.searchParams.get('nama_warung');
+
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      // no body provided
+    }
+
+    const targetId = body?.warung_id || body?.id || urlWarungId;
+    const targetName = (body?.nama_warung || body?.nama || urlNama || '').trim();
+
+    if (!targetId && !targetName) {
+      return NextResponse.json(
+        { error: 'ID atau nama warung harus disertakan untuk menghapus.' },
+        { status: 400 }
+      );
+    }
+
+    await prisma.warung.deleteMany({
+      where: {
+        OR: [
+          ...(targetId ? [{ id: targetId }] : []),
+          ...(targetName ? [{ nama_warung: targetName }] : []),
+        ],
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Warung berhasil dihapus dari database.',
+    });
+  } catch (err: any) {
+    console.error('Error delete warung:', err);
+    return NextResponse.json(
+      { error: err.message || 'Gagal menghapus warung dari database.' },
       { status: 500 }
     );
   }

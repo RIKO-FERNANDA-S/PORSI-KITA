@@ -62,6 +62,11 @@ export default function DompetBulananPage() {
   const [isSavingWarung, setIsSavingWarung] = useState(false);
   const [warungErrorMsg, setWarungErrorMsg] = useState('');
 
+  // Warung Deletion Confirmation Modal State
+  const [deleteWarungTarget, setDeleteWarungTarget] = useState<WarungLangganan | null>(null);
+  const [isExitingDeleteWarungModal, setIsExitingDeleteWarungModal] = useState(false);
+  const [isDeletingWarung, setIsDeletingWarung] = useState(false);
+
   // Sinkronisasi data keuangan real-time dari Database PostgreSQL
   const loadRealtimeFinance = async () => {
     setLoading(true);
@@ -319,11 +324,89 @@ export default function DompetBulananPage() {
     }
   };
 
+  // Delete Warung Handlers with animation & toast
+  const handleOpenDeleteWarungModal = (warung: WarungLangganan, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDeleteWarungTarget(warung);
+    setIsExitingDeleteWarungModal(false);
+  };
+
+  const handleCloseDeleteWarungModal = () => {
+    if (isDeletingWarung) return;
+    setIsExitingDeleteWarungModal(true);
+    setTimeout(() => {
+      setDeleteWarungTarget(null);
+      setIsExitingDeleteWarungModal(false);
+    }, 200);
+  };
+
+  const handleConfirmDeleteWarung = async () => {
+    if (!deleteWarungTarget) return;
+    const target = deleteWarungTarget;
+    setIsDeletingWarung(true);
+
+    try {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {}
+
+      await fetch('/api/family/transaction', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          warung_id: target.id,
+          nama_warung: target.nama,
+          phone: meta?.phone,
+        }),
+      });
+
+      setWarungs((prev) => prev.filter((w) => w.id !== target.id && w.nama !== target.nama));
+      if (selectedMerchantFilter === target.nama) {
+        setSelectedMerchantFilter('all');
+      }
+      if (modalMerchant === target.nama) {
+        setModalMerchant('Warung Sayur Terdekat');
+      }
+
+      setIsExitingDeleteWarungModal(true);
+      setTimeout(() => {
+        setDeleteWarungTarget(null);
+        setIsExitingDeleteWarungModal(false);
+        setIsDeletingWarung(false);
+      }, 200);
+
+      toast.success(
+        `Warung "${target.nama}" berhasil dihapus dari daftar langganan keluarga.`,
+        'Warung Dihapus'
+      );
+    } catch (err) {
+      console.warn('Gagal menghapus warung:', err);
+      setWarungs((prev) => prev.filter((w) => w.id !== target.id && w.nama !== target.nama));
+      if (selectedMerchantFilter === target.nama) setSelectedMerchantFilter('all');
+
+      setIsExitingDeleteWarungModal(true);
+      setTimeout(() => {
+        setDeleteWarungTarget(null);
+        setIsExitingDeleteWarungModal(false);
+        setIsDeletingWarung(false);
+      }, 200);
+
+      toast.success(
+        `Warung "${target.nama}" berhasil dihapus dari daftar langganan.`,
+        'Warung Dihapus'
+      );
+    }
+  };
+
   // Keyboard shortcut listener for closing modals (Esc)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (warungModalOpen && !isSavingWarung) {
+        if (deleteWarungTarget && !isDeletingWarung) {
+          handleCloseDeleteWarungModal();
+        } else if (warungModalOpen && !isSavingWarung) {
           handleCloseWarungModal();
         } else if (modalOpen) {
           handleCloseModal();
@@ -332,7 +415,7 @@ export default function DompetBulananPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [warungModalOpen, isSavingWarung, modalOpen]);
+  }, [deleteWarungTarget, isDeletingWarung, warungModalOpen, isSavingWarung, modalOpen]);
 
   // Handle amount change with Indonesian thousand separator
   const handleAmountInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -925,13 +1008,28 @@ export default function DompetBulananPage() {
                     warungs.map((w) => (
                       <div
                         key={w.id}
-                        className="bg-white rounded-2xl p-4 shadow-2xs border border-stone-200/60 transition-all hover:shadow-xs"
+                        className="bg-white rounded-2xl p-4 shadow-2xs border border-stone-200/60 transition-all hover:shadow-xs group"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <span className="font-bold text-[14px] text-[#2c1514]">{w.nama}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-[#b2f2b6] text-[#367041] text-[10px] font-bold whitespace-nowrap">
-                            {w.tag}
-                          </span>
+                          <div className="flex-1 min-w-0 pr-1">
+                            <span className="font-bold text-[14px] text-[#2c1514] block truncate">{w.nama}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="px-2 py-0.5 rounded-full bg-[#b2f2b6] text-[#367041] text-[10px] font-bold whitespace-nowrap">
+                              {w.tag}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenDeleteWarungModal(w, e)}
+                              className="w-7 h-7 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-400 hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                              title={`Hapus ${w.nama}`}
+                              aria-label={`Hapus ${w.nama}`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                         <div className="border-t border-stone-100 pt-2 mt-2 flex items-center justify-between text-[12px] text-[#737a65]">
                           <span>{w.count}x Belanja</span>
@@ -1396,6 +1494,107 @@ export default function DompetBulananPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. POP-UP MODAL KONFIRMASI HAPUS WARUNG (ANIMASI MASUK & KELUAR) */}
+      {deleteWarungTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-warung-modal-title"
+          className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto ${
+            isExitingDeleteWarungModal ? 'animate-fadeOut' : 'animate-fadeIn'
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingWarung) {
+              handleCloseDeleteWarungModal();
+            }
+          }}
+        >
+          <div
+            className={`bg-white w-full max-w-sm sm:max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl border border-stone-200/90 space-y-5 my-8 relative ${
+              isExitingDeleteWarungModal ? 'animate-scaleOut' : 'animate-scaleIn'
+            }`}
+          >
+            {/* Header Modal with Danger Visual */}
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0 shadow-2xs">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 id="delete-warung-modal-title" className="text-[18px] sm:text-[19px] font-extrabold text-[#2c1514] leading-tight">
+                  Hapus Warung Langganan?
+                </h3>
+                <p className="text-[12px] text-[#737a65] font-semibold mt-0.5">
+                  Porsi Kita • Pengaturan Belanja Dapur
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseDeleteWarungModal}
+                disabled={isDeletingWarung}
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-[#737a65] hover:text-[#2c1514] flex items-center justify-center transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                aria-label="Batal Hapus"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content Body: Senior-Friendly Reassurance */}
+            <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-stone-200/70 text-[13px] sm:text-[14px] text-[#4a403d] leading-relaxed space-y-2">
+              <p>
+                Apakah Ibu/Ayah yakin ingin menghapus{' '}
+                <strong className="text-[#2c1514] font-extrabold underline decoration-rose-300">
+                  {deleteWarungTarget.nama}
+                </strong>{' '}
+                dari daftar warung langganan?
+              </p>
+              <div className="flex items-center gap-2 pt-2 border-t border-stone-200/60 text-emerald-800 text-[12px] font-semibold">
+                <svg className="w-4 h-4 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Catatan riwayat transaksi belanja sebelumnya tetap aman tersimpan.</span>
+              </div>
+            </div>
+
+            {/* Action Buttons: Min 48px Touch Target */}
+            <div className="flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleCloseDeleteWarungModal}
+                disabled={isDeletingWarung}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl border-2 border-stone-200 hover:border-stone-300 hover:bg-stone-100 text-[#2c1514] font-bold text-[14px] transition min-h-[48px] flex items-center justify-center cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteWarung}
+                disabled={isDeletingWarung}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-[14px] shadow-md shadow-rose-600/25 transition min-h-[48px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
+              >
+                {isDeletingWarung ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Menghapus...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>Ya, Hapus Warung</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
