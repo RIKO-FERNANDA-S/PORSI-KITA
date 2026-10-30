@@ -11,10 +11,10 @@ export const metadata: Metadata = {
     'Aplikasi perencanaan menu mingguan hemat, bebas alergen, dan tepat gizi untuk seluruh anggota keluarga berbasis TKPI 2017 dan AKG Permenkes 28/2019.',
   icons: {
     icon: [
-      { url: '/logo.svg', type: 'image/svg+xml' },
+      { url: '/logo.png', type: 'image/png' },
     ],
-    shortcut: '/logo.svg',
-    apple: '/logo.svg',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
   },
 };
 
