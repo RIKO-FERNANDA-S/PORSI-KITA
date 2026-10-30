@@ -273,9 +273,9 @@ Dokumentasi dan proyek aplikasi ini dikembangkan secara kolaboratif oleh tim **"
 
 | Nama Lengkap | NIM | Peran / Tanggung Jawab Utama | Kontak |
 | :--- | :---: | :--- | :---: |
-| **Riko Fernanda Saputra** | `25081010301` | **Ketua Tim** & Full Stack System Architect (Next.js Core, Database Engine, Deployment) | [GitHub](https://github.com/RIKO-FERNANDA-S) |
-| **Devina Anindya Fitri** | `25084010051` | **Anggota Tim** & UI/UX Specialist (Design System, Usability Flow, Micro-Interactions) | [Email](mailto:devina.yowana@gmail.com) |
-| **Galuh Subhana** | `25084010013` | **Anggota Tim** & Nutrition Data Analyst & Quality Assurance (TKPI Data Verification & Testing) | [Email](mailto:galuh.yowana@gmail.com) |
+| **Riko Fernanda Saputra** | `25081010301` | **Ketua Tim** & Full Stack System Architect (Next.js Core, Database Engine, Deployment) | [Email](25081010301@student.upnjatim.ac.id) |
+| **Devina Anindya Fitri** | `25084010051` | **Anggota Tim** & UI/UX Specialist (Design System, Usability Flow, Micro-Interactions) | [Email](25084010051@student.upnjatim.ac.id) |
+| **Galuh Subhana** | `25084010013` | **Anggota Tim** & Nutrition Data Analyst & Quality Assurance (TKPI Data Verification & Testing) | [Email](25084010013@student.upnjatim.ac.id) |
 
 </div>
 
