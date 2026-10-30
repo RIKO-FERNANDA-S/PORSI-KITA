@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '../../components/Sidebar';
 import { toast } from '../../components/ToastProvider';
 import {
@@ -887,7 +888,12 @@ export default function DashboardPage() {
           <div className="flex flex-col w-full max-w-[1280px] mx-auto gap-6">
             
             {/* A. GREETING & CONTEXT HEADER */}
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-stone-200/60">
+            <motion.header
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+              className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-stone-200/60"
+            >
               <div className="flex flex-col">
                 <div className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#6DA003] uppercase tracking-wider mb-1">
                   <span className="w-2 h-2 rounded-full bg-[#6DA003]" />
@@ -918,7 +924,7 @@ export default function DashboardPage() {
                   {userProfileName ? userProfileName.charAt(0).toUpperCase() : 'K'}
                 </div>
               </div>
-            </header>
+            </motion.header>
 
             {/* B. MAIN 2-COLUMN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -927,8 +933,11 @@ export default function DashboardPage() {
               <div className="lg:col-span-8 flex flex-col gap-8">
                 
                 {/* C. DOMPET BULANAN & KEUANGAN (Solid Deep Green #0C4B20) */}
-                <section
+                <motion.section
                   id="dompet"
+                  initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                   className="rounded-3xl p-6 sm:p-8 text-white shadow-sm relative overflow-hidden"
                   style={{ backgroundColor: '#0C4B20' }}
                 >
@@ -982,20 +991,24 @@ export default function DashboardPage() {
 
                     {/* Action Buttons */}
                     <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 min-w-[200px] justify-center">
-                      <button
+                      <motion.button
                         type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => setShowExpenseModal(true)}
                         style={{ backgroundColor: '#6DA003' }}
-                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-white font-bold text-[13px] shadow-sm transition-all hover:brightness-105 active:scale-95 cursor-pointer min-h-[44px]"
+                        className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-white font-bold text-[13px] shadow-sm transition-all hover:brightness-105 cursor-pointer min-h-[44px]"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span>Catat Pengeluaran</span>
-                      </button>
+                      </motion.button>
 
-                      <button
+                      <motion.button
                         type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => {
                           setInputBudgetNominal(budgetBelanja.toLocaleString('id-ID'));
                           setInputTipeBudget(tipeBudget);
@@ -1008,10 +1021,10 @@ export default function DashboardPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                         <span>Atur Budget Belanja</span>
-                      </button>
+                      </motion.button>
                     </div>
                   </div>
-                </section>
+                </motion.section>
 
                 {/* D. KALENDER & JADWAL MASAKAN */}
                 <section className="flex flex-col gap-4">
@@ -1044,9 +1057,11 @@ export default function DashboardPage() {
                     {daysList.map((item) => {
                       const isSelected = selectedDayIndex === item.hari_ke;
                       return (
-                        <button
+                        <motion.button
                           key={item.hari_ke}
                           type="button"
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.96 }}
                           onClick={() => setSelectedDayIndex(item.hari_ke)}
                           style={{ backgroundColor: isSelected ? '#0C4B20' : undefined }}
                           className={`flex-1 min-w-[64px] py-2 px-1.5 rounded-2xl flex flex-col items-center transition-all cursor-pointer ${
@@ -1074,54 +1089,72 @@ export default function DashboardPage() {
                           ) : (
                             <span className="text-[10px] text-stone-400 leading-none mt-1">{item.monthShort}</span>
                           )}
-                        </button>
+                        </motion.button>
                       );
                     })}
                   </div>
 
                   {/* 3 Meal Schedule Cards */}
-                  {!currentDayData || !currentDayData.sesi_makan ? (
-                    <div className="bg-white rounded-3xl p-8 border border-stone-200 text-center flex flex-col items-center justify-center gap-3 mt-2 shadow-xs">
-                      <div className="w-16 h-16 rounded-full bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-3xl">
-                        🍲
-                      </div>
-                      <h3 className="font-extrabold text-[18px] text-[#0D0101]">Belum Ada Rencana Menu Masak</h3>
-                      <p className="text-[13px] text-stone-500 max-w-md">
-                        Susun rencana menu 7 hari keluarga Anda yang otomatis menghitung takaran porsi sesuai AKG dan estimasi belanja harian.
-                      </p>
-                      <Link
-                        href="/menu"
-                        className="mt-2 px-6 py-3 rounded-2xl bg-[#0C4B20] hover:bg-[#073214] text-white font-bold text-[14px] transition shadow-xs flex items-center gap-2"
+                  <AnimatePresence mode="wait">
+                    {!currentDayData || !currentDayData.sesi_makan ? (
+                      <motion.div
+                        key="empty-menu"
+                        initial={{ opacity: 0, scale: 0.97 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.97 }}
+                        transition={{ duration: 0.25 }}
+                        className="bg-white rounded-3xl p-8 border border-stone-200 text-center flex flex-col items-center justify-center gap-3 mt-2 shadow-xs"
                       >
-                        <span>Buat Menu 7 Hari Sekarang</span>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-2">
-                      {/* Card Pagi */}
-                      {(() => {
-                        const pagiSesi = currentDayData.sesi_makan.pagi;
-                        if (!pagiSesi) return null;
+                        <div className="w-16 h-16 rounded-full bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-3xl">
+                          🍲
+                        </div>
+                        <h3 className="font-extrabold text-[18px] text-[#0D0101]">Belum Ada Rencana Menu Masak</h3>
+                        <p className="text-[13px] text-stone-500 max-w-md">
+                          Susun rencana menu 7 hari keluarga Anda yang otomatis menghitung takaran porsi sesuai AKG dan estimasi belanja harian.
+                        </p>
+                        <Link
+                          href="/menu"
+                          className="mt-2 px-6 py-3 rounded-2xl bg-[#0C4B20] hover:bg-[#073214] text-white font-bold text-[14px] transition shadow-xs flex items-center gap-2"
+                        >
+                          <span>Buat Menu 7 Hari Sekarang</span>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                          </svg>
+                        </Link>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key={`meals-day-${selectedDayIndex}`}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -12 }}
+                        transition={{ duration: 0.28, ease: 'easeOut' }}
+                        className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-2"
+                      >
+                        {/* Card Pagi */}
+                        {(() => {
+                          const pagiSesi = currentDayData.sesi_makan.pagi;
+                          if (!pagiSesi) return null;
 
-                        const mainDish =
-                          pagiSesi.hidangan.find((h) => h.kategori === 'Lauk Hewani') ||
-                          pagiSesi.hidangan.find((h) => h.kategori === 'Sayuran') ||
-                          pagiSesi.hidangan[0];
-                        const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP013.webp';
-                        const pagiCostNum = pagiSesi.hidangan.reduce((acc, h) => {
-                          const totalPengali = pagiSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
-                          return acc + hitungBiayaDish(h) * totalPengali;
-                        }, 0);
-                        const pagiCost = `Rp ${Math.round(pagiCostNum).toLocaleString('id-ID')}`;
-                        const pagiPortion = getDynamicPortionString(pagiSesi.porsi_per_anggota);
-                        const sayurDish = pagiSesi.hidangan.find((h) => h.kategori === 'Sayuran');
-                        const isSameVeg = isSayurPagiSiangSama && sayurDish;
+                          const mainDish =
+                            pagiSesi.hidangan.find((h) => h.kategori === 'Lauk Hewani') ||
+                            pagiSesi.hidangan.find((h) => h.kategori === 'Sayuran') ||
+                            pagiSesi.hidangan[0];
+                          const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP013.webp';
+                          const pagiCostNum = pagiSesi.hidangan.reduce((acc, h) => {
+                            const totalPengali = pagiSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
+                            return acc + hitungBiayaDish(h) * totalPengali;
+                          }, 0);
+                          const pagiCost = `Rp ${Math.round(pagiCostNum).toLocaleString('id-ID')}`;
+                          const pagiPortion = getDynamicPortionString(pagiSesi.porsi_per_anggota);
+                          const sayurDish = pagiSesi.hidangan.find((h) => h.kategori === 'Sayuran');
+                          const isSameVeg = isSayurPagiSiangSama && sayurDish;
 
-                        return (
-                          <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/90 justify-between">
+                          return (
+                            <motion.article
+                              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                              className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-shadow border border-stone-200/90 justify-between"
+                            >
                             <div>
                               {/* Hero Thumbnail */}
                               <div className="h-40 w-full relative bg-stone-100">
@@ -1198,8 +1231,10 @@ export default function DashboardPage() {
 
                             {/* Card Footer */}
                             <div className="p-4 pt-0">
-                              <button
+                              <motion.button
                                 type="button"
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() =>
                                   setSelectedRecipe({
                                     title: 'Sarapan Pagi Keluarga',
@@ -1210,15 +1245,15 @@ export default function DashboardPage() {
                                     dishes: pagiSesi.hidangan,
                                   })
                                 }
-                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200 active:scale-98"
+                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200"
                               >
                                 <span>Lihat Rincian Porsi &amp; Resep</span>
                                 <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                                 </svg>
-                              </button>
+                              </motion.button>
                             </div>
-                          </article>
+                          </motion.article>
                         );
                       })()}
 
@@ -1242,7 +1277,10 @@ export default function DashboardPage() {
                         const isSameVeg = isSayurPagiSiangSama && sayurDish;
 
                         return (
-                          <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/90 justify-between">
+                          <motion.article
+                            whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                            className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-shadow border border-stone-200/90 justify-between"
+                          >
                             <div>
                               {/* Hero Thumbnail */}
                               <div className="h-40 w-full relative bg-stone-100">
@@ -1319,8 +1357,10 @@ export default function DashboardPage() {
 
                             {/* Card Footer */}
                             <div className="p-4 pt-0">
-                              <button
+                              <motion.button
                                 type="button"
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() =>
                                   setSelectedRecipe({
                                     title: 'Makan Siang Keluarga',
@@ -1331,15 +1371,15 @@ export default function DashboardPage() {
                                     dishes: siangSesi.hidangan,
                                   })
                                 }
-                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200 active:scale-98"
+                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200"
                               >
                                 <span>Lihat Rincian Porsi &amp; Resep</span>
                                 <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                                 </svg>
-                              </button>
+                              </motion.button>
                             </div>
-                          </article>
+                          </motion.article>
                         );
                       })()}
 
@@ -1362,7 +1402,10 @@ export default function DashboardPage() {
                         const sayurDish = malamSesi.hidangan.find((h) => h.kategori === 'Sayuran');
 
                         return (
-                          <article className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all border border-stone-200/90 justify-between">
+                          <motion.article
+                            whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                            className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-shadow border border-stone-200/90 justify-between"
+                          >
                             <div>
                               {/* Hero Thumbnail */}
                               <div className="h-40 w-full relative bg-stone-100">
@@ -1446,8 +1489,10 @@ export default function DashboardPage() {
 
                             {/* Card Footer */}
                             <div className="p-4 pt-0">
-                              <button
+                              <motion.button
                                 type="button"
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() =>
                                   setSelectedRecipe({
                                     title: 'Makan Malam Keluarga',
@@ -1458,26 +1503,30 @@ export default function DashboardPage() {
                                     dishes: malamSesi.hidangan,
                                   })
                                 }
-                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200 active:scale-98"
+                                className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-stone-50 hover:bg-[#EAF5D8] hover:text-[#0C4B20] text-[#0D0101] text-[12.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200"
                               >
                                 <span>Lihat Rincian Porsi &amp; Resep</span>
                                 <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                                 </svg>
-                              </button>
+                              </motion.button>
                             </div>
-                          </article>
+                          </motion.article>
                         );
                       })()}
-                    </div>
+                    </motion.div>
                   )}
+                  </AnimatePresence>
                 </section>
 
               </div>
 
               {/* RIGHT COLUMN: WIDGET DAFTAR BELANJA PASAR (4 Kolom - Tersinkronisasi Resep) */}
-              <aside
+              <motion.aside
                 id="shopping-list-section"
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.1, ease: 'easeOut' }}
                 className="lg:col-span-4 flex flex-col gap-4 rounded-3xl p-5 sm:p-6 shadow-xs border border-stone-200 bg-white"
               >
                 {/* Header Widget */}
@@ -1518,8 +1567,9 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-1 p-1 bg-stone-100 rounded-2xl border border-stone-200/80">
-                    <button
+                    <motion.button
                       type="button"
+                      whileTap={{ scale: 0.96 }}
                       onClick={() => setPeriodeFilter('hari_ini')}
                       className={`min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                         periodeFilter === 'hari_ini'
@@ -1528,9 +1578,10 @@ export default function DashboardPage() {
                       }`}
                     >
                       {selectedDayIndex === 1 ? 'Hari Ini' : `Hari ke-${selectedDayIndex}`}
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
                       type="button"
+                      whileTap={{ scale: 0.96 }}
                       onClick={() => setPeriodeFilter('3_hari')}
                       className={`min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                         periodeFilter === '3_hari'
@@ -1539,9 +1590,10 @@ export default function DashboardPage() {
                       }`}
                     >
                       3 Hari
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
                       type="button"
+                      whileTap={{ scale: 0.96 }}
                       onClick={() => setPeriodeFilter('1_minggu')}
                       className={`min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                         periodeFilter === '1_minggu'
@@ -1550,7 +1602,7 @@ export default function DashboardPage() {
                       }`}
                     >
                       1 Minggu
-                    </button>
+                    </motion.button>
                   </div>
                 </div>
 
@@ -1572,19 +1624,27 @@ export default function DashboardPage() {
                     </button>
                   </div>
 
-                  {showRecipesDetail && (
-                    <div className="pt-2 mt-2 border-t border-[#6DA003]/20 flex flex-wrap gap-1.5 animate-fadeIn">
-                      {resepDalamPeriode.map((r) => (
-                        <span
-                          key={r.kode}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-[#0D0101] border border-stone-200/80 shadow-2xs"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#6DA003]" />
-                          {r.nama}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <AnimatePresence>
+                    {showRecipesDetail && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.22 }}
+                        className="pt-2 mt-2 border-t border-[#6DA003]/20 flex flex-wrap gap-1.5 overflow-hidden"
+                      >
+                        {resepDalamPeriode.map((r) => (
+                          <span
+                            key={r.kode}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-[#0D0101] border border-stone-200/80 shadow-2xs"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#6DA003]" />
+                            {r.nama}
+                          </span>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Filter Kulkas Bar & Penghematan */}
@@ -1607,72 +1667,84 @@ export default function DashboardPage() {
 
                 {/* Checklist Items */}
                 <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
-                  {displayedShoppingList.length === 0 ? (
-                    <div className="py-6 text-center text-stone-400 text-xs font-medium">
-                      Semua bahan sudah tersedia di kulkas atau belum ada rencana menu.
-                    </div>
-                  ) : (
-                    displayedShoppingList.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`flex items-center justify-between p-2.5 rounded-xl transition-all border ${
-                          item.checked
-                            ? 'bg-stone-50 border-stone-200/50 opacity-60'
-                            : item.isFridge
-                            ? 'bg-blue-50/50 border-blue-200/60'
-                            : 'bg-stone-50/80 hover:bg-stone-100 border-stone-200/60'
-                        }`}
+                  <AnimatePresence mode="popLayout">
+                    {displayedShoppingList.length === 0 ? (
+                      <motion.div
+                        key="empty-shopping"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="py-6 text-center text-stone-400 text-xs font-medium"
                       >
-                        <label className="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={item.checked}
-                            onChange={() => handleToggleCheck(item.id, item.isCustom)}
-                            className="w-4 h-4 rounded text-[#0C4B20] focus:ring-0 accent-[#6DA003] cursor-pointer shrink-0"
-                          />
-                          <span className="text-sm shrink-0">
-                            {getKategoriIcon(item.kategori)}
-                          </span>
-                          <span
-                            className={`text-[13px] truncate transition-colors ${
-                              item.checked
-                                ? 'line-through text-stone-400'
-                                : 'text-[#0D0101] font-semibold'
-                            }`}
-                          >
-                            {item.name}
-                          </span>
-                        </label>
-
-                        <div className="flex items-center gap-2 shrink-0 ml-2">
-                          {!item.isCustom && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleToggleFridge(e, item.kode_tkpi)}
-                              title={item.isFridge ? 'Hapus dari stok kulkas' : 'Tandai sudah ada di kulkas'}
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer ${
-                                item.isFridge
-                                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                                  : 'bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800'
-                              }`}
-                            >
-                              {item.isFridge ? '🧊 Di Kulkas' : '+ Kulkas'}
-                            </button>
-                          )}
-
-                          {item.price > 0 && (
-                            <span
-                              className={`text-[11px] tabular-nums font-mono ${
-                                item.checked || item.isFridge ? 'text-stone-400 line-through' : 'text-[#0C4B20] font-bold'
-                              }`}
-                            >
-                              Rp {item.price.toLocaleString('id-ID')}
+                        Semua bahan sudah tersedia di kulkas atau belum ada rencana menu.
+                      </motion.div>
+                    ) : (
+                      displayedShoppingList.map((item) => (
+                        <motion.div
+                          layout
+                          key={item.id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.2 }}
+                          className={`flex items-center justify-between p-2.5 rounded-xl transition-all border ${
+                            item.checked
+                              ? 'bg-stone-50 border-stone-200/50 opacity-60'
+                              : item.isFridge
+                              ? 'bg-blue-50/50 border-blue-200/60'
+                              : 'bg-stone-50/80 hover:bg-stone-100 border-stone-200/60'
+                          }`}
+                        >
+                          <label className="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={item.checked}
+                              onChange={() => handleToggleCheck(item.id, item.isCustom)}
+                              className="w-4 h-4 rounded text-[#0C4B20] focus:ring-0 accent-[#6DA003] cursor-pointer shrink-0"
+                            />
+                            <span className="text-sm shrink-0">
+                              {getKategoriIcon(item.kategori)}
                             </span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
+                            <span
+                              className={`text-[13px] truncate transition-colors ${
+                                item.checked
+                                  ? 'line-through text-stone-400'
+                                  : 'text-[#0D0101] font-semibold'
+                              }`}
+                            >
+                              {item.name}
+                            </span>
+                          </label>
+
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            {!item.isCustom && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleToggleFridge(e, item.kode_tkpi)}
+                                title={item.isFridge ? 'Hapus dari stok kulkas' : 'Tandai sudah ada di kulkas'}
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer ${
+                                  item.isFridge
+                                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                    : 'bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800'
+                                }`}
+                              >
+                                {item.isFridge ? '🧊 Di Kulkas' : '+ Kulkas'}
+                              </button>
+                            )}
+
+                            {item.price > 0 && (
+                              <span
+                                className={`text-[11px] tabular-nums font-mono ${
+                                  item.checked || item.isFridge ? 'text-stone-400 line-through' : 'text-[#0C4B20] font-bold'
+                                }`}
+                              >
+                                Rp {item.price.toLocaleString('id-ID')}
+                              </span>
+                            )}
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Quick Add Input Form */}
@@ -1700,11 +1772,13 @@ export default function DashboardPage() {
 
                 {/* Action Buttons: WhatsApp & Lihat Daftar Belanja Lengkap */}
                 <div className="flex flex-col gap-2 mt-1">
-                  <button
+                  <motion.button
                     type="button"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
                     onClick={handleCopyWhatsApp}
                     style={{ backgroundColor: '#6DA003' }}
-                    className="w-full py-3 px-4 rounded-xl text-white font-bold text-[13px] flex items-center justify-center gap-2 shadow-sm transition hover:brightness-105 active:scale-98 cursor-pointer min-h-[44px]"
+                    className="w-full py-3 px-4 rounded-xl text-white font-bold text-[13px] flex items-center justify-center gap-2 shadow-sm transition hover:brightness-105 cursor-pointer min-h-[44px]"
                   >
                     {copiedWa ? (
                       <>
@@ -1721,7 +1795,7 @@ export default function DashboardPage() {
                         <span>Salin Format WhatsApp</span>
                       </>
                     )}
-                  </button>
+                  </motion.button>
 
                   <Link
                     href={`/belanja/${rencanaMenu?.id || 'aktif'}`}
@@ -1730,7 +1804,7 @@ export default function DashboardPage() {
                     Buka Checklist Pasar Lengkap (Lapak &amp; Kulkas) →
                   </Link>
                 </div>
-              </aside>
+              </motion.aside>
 
             </div>
 
@@ -1739,503 +1813,567 @@ export default function DashboardPage() {
       </div>
 
       {/* 4. MODAL DETAIL RESEP & PORSI */}
-      {selectedRecipe && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-stone-200">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-              <div>
-                <span className="text-[11px] font-extrabold text-[#6DA003] uppercase tracking-wider block">
-                  {selectedRecipe.session}
-                </span>
-                <h3 className="text-[20px] font-extrabold text-[#0D0101]">{selectedRecipe.title}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedRecipe(null)}
-                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="py-4 space-y-4 text-sm max-h-[65vh] overflow-y-auto pr-1">
-              <div className="flex items-center justify-between p-3.5 bg-[#F2F9EC] rounded-2xl border border-[#6DA003]/20">
-                <span className="text-[12px] text-[#0C4B20] font-bold">Estimasi Biaya Sesi:</span>
-                <span className="text-[16px] font-extrabold text-[#0C4B20]">{selectedRecipe.cost}</span>
-              </div>
-
-              {/* Rincian Hidangan Masakan */}
-              {selectedRecipe.dishes && selectedRecipe.dishes.length > 0 && (
-                <div className="space-y-3">
-                  <span className="font-bold text-[#0D0101] block text-xs uppercase tracking-wider text-stone-500">
-                    Hidangan dalam Sesi Ini ({selectedRecipe.dishes.length} Masakan):
+      <AnimatePresence>
+        {selectedRecipe && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setSelectedRecipe(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-stone-200"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+                <div>
+                  <span className="text-[11px] font-extrabold text-[#6DA003] uppercase tracking-wider block">
+                    {selectedRecipe.session}
                   </span>
+                  <h3 className="text-[20px] font-extrabold text-[#0D0101]">{selectedRecipe.title}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecipe(null)}
+                  className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="py-4 space-y-4 text-sm max-h-[65vh] overflow-y-auto pr-1">
+                <div className="flex items-center justify-between p-3.5 bg-[#F2F9EC] rounded-2xl border border-[#6DA003]/20">
+                  <span className="text-[12px] text-[#0C4B20] font-bold">Estimasi Biaya Sesi:</span>
+                  <span className="text-[16px] font-extrabold text-[#0C4B20]">{selectedRecipe.cost}</span>
+                </div>
+
+                {/* Rincian Hidangan Masakan */}
+                {selectedRecipe.dishes && selectedRecipe.dishes.length > 0 && (
                   <div className="space-y-3">
-                    {selectedRecipe.dishes.map((d: any) => {
-                      const master = RESEP_MAP.get(d.kode);
-                      const dishBiaya = hitungBiayaDish(d);
-                      const bahanList = master?.bahan || d.bahan || [];
+                    <span className="font-bold text-[#0D0101] block text-xs uppercase tracking-wider text-stone-500">
+                      Hidangan dalam Sesi Ini ({selectedRecipe.dishes.length} Masakan):
+                    </span>
+                    <div className="space-y-3">
+                      {selectedRecipe.dishes.map((d: any) => {
+                        const master = RESEP_MAP.get(d.kode);
+                        const dishBiaya = hitungBiayaDish(d);
+                        const bahanList = master?.bahan || d.bahan || [];
 
-                      return (
-                        <div
-                          key={d.kode}
-                          className="p-3 rounded-2xl bg-stone-50 border border-stone-200/70 space-y-2.5"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <img
-                                src={`/images/resep/${d.kode}.webp`}
-                                alt={d.nama}
-                                className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
-                              />
-                              <div className="min-w-0">
-                                <h5 className="font-bold text-[13.5px] text-[#0D0101] truncate">{d.nama}</h5>
-                                <span className="text-[11px] text-stone-500 block truncate">
-                                  {d.kategori} • {d.gizi_per_porsi?.energi_kcal} kkal
+                        return (
+                          <div
+                            key={d.kode}
+                            className="p-3 rounded-2xl bg-stone-50 border border-stone-200/70 space-y-2.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <img
+                                  src={`/images/resep/${d.kode}.webp`}
+                                  alt={d.nama}
+                                  className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
+                                />
+                                <div className="min-w-0">
+                                  <h5 className="font-bold text-[13.5px] text-[#0D0101] truncate">{d.nama}</h5>
+                                  <span className="text-[11px] text-stone-500 block truncate">
+                                    {d.kategori} • {d.gizi_per_porsi?.energi_kcal} kkal
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-[12px] font-bold text-[#0C4B20] font-mono block">
+                                  Rp {dishBiaya.toLocaleString('id-ID')}
                                 </span>
+                                <span className="text-[10px] text-stone-400">per porsi</span>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              <span className="text-[12px] font-bold text-[#0C4B20] font-mono block">
-                                Rp {dishBiaya.toLocaleString('id-ID')}
-                              </span>
-                              <span className="text-[10px] text-stone-400">per porsi</span>
-                            </div>
-                          </div>
 
-                          {/* Tabel Rincian Bahan Masakan & Rumus BDD */}
-                          {bahanList.length > 0 && (
-                            <div className="mt-1 pt-2 border-t border-stone-200/60">
-                              <span className="text-[10.5px] font-semibold text-stone-500 block mb-1">
-                                Rincian Bahan Baku &amp; BDD Kemenkes:
-                              </span>
-                              <div className="overflow-x-auto rounded-xl border border-stone-200/60 bg-white">
-                                <table className="w-full text-left text-[11px]">
-                                  <thead className="bg-stone-50 text-stone-500 font-semibold uppercase text-[9.5px]">
-                                    <tr>
-                                      <th className="py-1.5 px-2">Bahan</th>
-                                      <th className="py-1.5 px-2">Takaran</th>
-                                      <th className="py-1.5 px-2">BDD %</th>
-                                      <th className="py-1.5 px-2 text-right">Est. Harga</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-stone-100">
-                                    {bahanList.map((bItem: any, bIdx: number) => {
-                                      const bInfo = BAHAN_MAP.get(bItem.kode_tkpi);
-                                      const bddFactor = ((bInfo?.bdd_percent || 100) > 0 ? (bInfo?.bdd_percent || 100) : 100) / 100;
-                                      const harga100g = (bInfo?.harga_per_100g_rp && bInfo.harga_per_100g_rp > 0) ? bInfo.harga_per_100g_rp : 1500;
-                                      const bCost = Math.round((bItem.jumlah_gram / bddFactor / 100) * harga100g);
-                                      return (
-                                        <tr key={bIdx} className="hover:bg-stone-50">
-                                          <td className="py-1 px-2 font-medium text-stone-800">
-                                            {bInfo?.nama || bItem.nama_bahan || bItem.kode_tkpi}
-                                          </td>
-                                          <td className="py-1 px-2 text-stone-600 font-mono">
-                                            {formatKuantitasBahan(bInfo?.nama || bItem.nama_bahan, bItem.jumlah_gram)}
-                                          </td>
-                                          <td className="py-1 px-2 text-stone-500">
-                                            {bInfo?.bdd_percent || 100}%
-                                          </td>
-                                          <td className="py-1 px-2 text-right font-mono font-semibold text-[#0C4B20]">
-                                            Rp {bCost.toLocaleString('id-ID')}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                            {/* Tabel Rincian Bahan Masakan & Rumus BDD */}
+                            {bahanList.length > 0 && (
+                              <div className="mt-1 pt-2 border-t border-stone-200/60">
+                                <span className="text-[10.5px] font-semibold text-stone-500 block mb-1">
+                                  Rincian Bahan Baku &amp; BDD Kemenkes:
+                                </span>
+                                <div className="overflow-x-auto rounded-xl border border-stone-200/60 bg-white">
+                                  <table className="w-full text-left text-[11px]">
+                                    <thead className="bg-stone-50 text-stone-500 font-semibold uppercase text-[9.5px]">
+                                      <tr>
+                                        <th className="py-1.5 px-2">Bahan</th>
+                                        <th className="py-1.5 px-2">Takaran</th>
+                                        <th className="py-1.5 px-2">BDD %</th>
+                                        <th className="py-1.5 px-2 text-right">Est. Harga</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-100">
+                                      {bahanList.map((bItem: any, bIdx: number) => {
+                                        const bInfo = BAHAN_MAP.get(bItem.kode_tkpi);
+                                        const bddFactor = ((bInfo?.bdd_percent || 100) > 0 ? (bInfo?.bdd_percent || 100) : 100) / 100;
+                                        const harga100g = (bInfo?.harga_per_100g_rp && bInfo.harga_per_100g_rp > 0) ? bInfo.harga_per_100g_rp : 1500;
+                                        const bCost = Math.round((bItem.jumlah_gram / bddFactor / 100) * harga100g);
+                                        return (
+                                          <tr key={bIdx} className="hover:bg-stone-50">
+                                            <td className="py-1 px-2 font-medium text-stone-800">
+                                              {bInfo?.nama || bItem.nama_bahan || bItem.kode_tkpi}
+                                            </td>
+                                            <td className="py-1 px-2 text-stone-600 font-mono">
+                                              {formatKuantitasBahan(bInfo?.nama || bItem.nama_bahan, bItem.jumlah_gram)}
+                                            </td>
+                                            <td className="py-1 px-2 text-stone-500">
+                                              {bInfo?.bdd_percent || 100}%
+                                            </td>
+                                            <td className="py-1 px-2 text-right font-mono font-semibold text-[#0C4B20]">
+                                              Rp {bCost.toLocaleString('id-ID')}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <span className="font-bold text-[#0D0101] block mb-1.5">Nilai Gizi Unggulan:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedRecipe.tags.map((t) => (
+                      <span key={t} className="px-2.5 py-1 rounded-lg bg-[#B2F2B6] text-[#002109] text-xs font-bold">
+                        {t}
+                      </span>
+                    ))}
                   </div>
                 </div>
-              )}
 
-              <div>
-                <span className="font-bold text-[#0D0101] block mb-1.5">Nilai Gizi Unggulan:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedRecipe.tags.map((t) => (
-                    <span key={t} className="px-2.5 py-1 rounded-lg bg-[#B2F2B6] text-[#002109] text-xs font-bold">
-                      {t}
-                    </span>
-                  ))}
+                <div>
+                  <span className="font-bold text-[#0D0101] block mb-1.5">Pembagian Porsi Keluarga ({userProfileName}):</span>
+                  <div className="text-stone-700 leading-relaxed text-xs sm:text-sm bg-stone-50 p-3.5 rounded-xl border border-stone-200">
+                    {selectedRecipe.portionDetail}
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <span className="font-bold text-[#0D0101] block mb-1.5">Pembagian Porsi Keluarga ({userProfileName}):</span>
-                <div className="text-stone-700 leading-relaxed text-xs sm:text-sm bg-stone-50 p-3.5 rounded-xl border border-stone-200">
-                  {selectedRecipe.portionDetail}
-                </div>
+              <div className="pt-3 border-t border-stone-200 flex items-center justify-between gap-2">
+                <Link
+                  href="/menu"
+                  className="text-[12px] font-bold text-[#0C4B20] hover:text-[#6DA003] transition flex items-center gap-1"
+                >
+                  <span>Buka Kalender Menu 7 Hari →</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecipe(null)}
+                  className="px-5 py-2.5 rounded-xl bg-[#0C4B20] text-white font-bold text-xs hover:brightness-105 transition cursor-pointer shadow-sm"
+                >
+                  Tutup Rincian
+                </button>
               </div>
-            </div>
-
-            <div className="pt-3 border-t border-stone-200 flex items-center justify-between gap-2">
-              <Link
-                href="/menu"
-                className="text-[12px] font-bold text-[#0C4B20] hover:text-[#6DA003] transition flex items-center gap-1"
-              >
-                <span>Buka Kalender Menu 7 Hari →</span>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setSelectedRecipe(null)}
-                className="px-5 py-2.5 rounded-xl bg-[#0C4B20] text-white font-bold text-xs hover:brightness-110 transition cursor-pointer shadow-sm"
-              >
-                Tutup Rincian
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 5. MODAL CATAT PENGELUARAN */}
-      {showExpenseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-              <h3 className="text-[18px] font-extrabold text-[#0D0101]">Catat Pengeluaran Belanja</h3>
-              <button
-                type="button"
-                onClick={() => setShowExpenseModal(false)}
-                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleAddExpense} className="py-4 space-y-4">
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">Nominal Belanja (Rp)</label>
-                <input
-                  type="text"
-                  required
-                  value={expenseAmount}
-                  onChange={(e) => setExpenseAmount(e.target.value)}
-                  placeholder="Contoh: 35000"
-                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">Catatan / Warung Pasar</label>
-                <input
-                  type="text"
-                  value={expenseNote}
-                  onChange={(e) => setExpenseNote(e.target.value)}
-                  placeholder={`Contoh: Belanja sayur di ${wilayahName}`}
-                  className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2.5">
+      <AnimatePresence>
+        {showExpenseModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setShowExpenseModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+                <h3 className="text-[18px] font-extrabold text-[#0D0101]">Catat Pengeluaran Belanja</h3>
                 <button
                   type="button"
                   onClick={() => setShowExpenseModal(false)}
-                  className="min-h-[44px] px-4 py-2 rounded-xl text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
                 >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
-                  }}
-                  className="min-h-[44px] px-5 py-2.5 rounded-xl text-white font-bold text-xs hover:brightness-105 shadow-sm cursor-pointer"
-                >
-                  Simpan Pengeluaran
+                  ✕
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+              <form onSubmit={handleAddExpense} className="py-4 space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">Nominal Belanja (Rp)</label>
+                  <input
+                    type="text"
+                    required
+                    value={expenseAmount}
+                    onChange={(e) => setExpenseAmount(e.target.value)}
+                    placeholder="Contoh: 35000"
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">Catatan / Warung Pasar</label>
+                  <input
+                    type="text"
+                    value={expenseNote}
+                    onChange={(e) => setExpenseNote(e.target.value)}
+                    placeholder={`Contoh: Belanja sayur di ${wilayahName}`}
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowExpenseModal(false)}
+                    className="min-h-[44px] px-4 py-2 rounded-xl text-stone-600 text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    style={{
+                      background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
+                    }}
+                    className="min-h-[44px] px-5 py-2.5 rounded-xl text-white font-bold text-xs hover:brightness-105 shadow-sm cursor-pointer"
+                  >
+                    Simpan Pengeluaran
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 6. MODAL KEAMANAN: AMANKAN AKUN KELUARGA IBU */}
-      {showSecurityModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-xl shrink-0">
-                  🛡️
+      <AnimatePresence>
+        {showSecurityModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => !isOver24Hours && setShowSecurityModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-xl shrink-0">
+                    🛡️
+                  </div>
+                  <div>
+                    <h3 className="text-[18px] font-extrabold text-[#0D0101] leading-tight">
+                      Amankan Akun {userProfileName}
+                    </h3>
+                    <span className="text-[11px] font-bold text-[#0C4B20]">
+                      Porsi Kita • Perlindungan Akun
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-[18px] font-extrabold text-[#0D0101] leading-tight">
-                    Amankan Akun {userProfileName}
-                  </h3>
-                  <span className="text-[11px] font-bold text-[#0C4B20]">
-                    Porsi Kita • Perlindungan Akun
-                  </span>
-                </div>
+                {!isOver24Hours && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSecurityModal(false)}
+                    className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
+                    title="Tutup dialog"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
-              {!isOver24Hours && (
+
+              <p className="text-[13px] text-stone-600 mt-3.5 leading-relaxed">
+                {isOver24Hours
+                  ? `Sudah lebih dari 24 jam akun ${userProfileName} belum memiliki kata sandi. Demi keamanan data keluarga dan anggaran belanja, mohon buat kata sandi baru untuk akun ini sebelum melanjutkan.`
+                  : `Ibu baru saja masuk tanpa kata sandi. Silakan buat kata sandi baru untuk melindungi akun ${userProfileName} saat masuk kembali.`}
+              </p>
+
+              {passwordError && (
+                <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>{passwordError}</span>
+                </div>
+              )}
+              {passwordSuccess && (
+                <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                  <span>✓</span>
+                  <span>{passwordSuccess}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveSecurityPassword} className="py-4 space-y-3.5">
+                <div>
+                  <label className="text-xs font-bold text-[#0D0101] block mb-1">
+                    Kata Sandi Baru <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      placeholder="Minimal 6 karakter"
+                      className="w-full px-4 py-2.5 pr-10 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-800 text-xs font-semibold cursor-pointer select-none"
+                      title={showNewPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+                    >
+                      {showNewPassword ? 'Sembunyi' : 'Lihat'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#0D0101] block mb-1">
+                    Ulangi Kata Sandi Baru <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={confirmPasswordInput}
+                      onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                      placeholder="Ulangi kata sandi baru"
+                      className="w-full px-4 py-2.5 pr-10 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-800 text-xs font-semibold cursor-pointer select-none"
+                      title={showConfirmPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+                    >
+                      {showConfirmPassword ? 'Sembunyi' : 'Lihat'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2.5">
+                  {!isOver24Hours && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSecurityModal(false)}
+                      className="min-h-[48px] px-5 py-2.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-bold hover:bg-stone-200 transition cursor-pointer"
+                    >
+                      Nanti Saja
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={passwordLoading}
+                    style={{
+                      background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
+                      boxShadow: '0 4px 12px rgba(109, 160, 3, 0.25)',
+                    }}
+                    className="min-h-[48px] px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:brightness-105 transition shadow-sm cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {passwordLoading ? (
+                      <span>Menyimpan Sandi...</span>
+                    ) : (
+                      <span>Simpan Kata Sandi Akun</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 7. MODAL ATUR BUDGET BELANJA (BULANAN VS MINGGUAN) */}
+      <AnimatePresence>
+        {showBudgetModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setShowBudgetModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-xl shrink-0">
+                    💰
+                  </div>
+                  <div>
+                    <h3 className="text-[18px] font-extrabold text-[#0D0101] leading-tight">
+                      Atur Budget Belanja
+                    </h3>
+                    <span className="text-[11px] font-bold text-[#0C4B20]">
+                      Porsi Kita • Pengaturan Anggaran Dapur
+                    </span>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowSecurityModal(false)}
+                  onClick={() => setShowBudgetModal(false)}
                   className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
                   title="Tutup dialog"
                 >
                   ✕
                 </button>
+              </div>
+
+              <p className="text-[13px] text-stone-600 mt-3.5 leading-relaxed">
+                Pilih tipe periode belanja Ibu (bulanan atau mingguan). Jika memilih mingguan, sistem otomatis mengalikan 4 minggu untuk menghitung total anggaran 1 bulan.
+              </p>
+
+              {budgetFeedback.msg && (
+                <div
+                  className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                    budgetFeedback.type === 'error'
+                      ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                      : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  }`}
+                >
+                  <span>{budgetFeedback.type === 'error' ? '⚠️' : '✓'}</span>
+                  <span>{budgetFeedback.msg}</span>
+                </div>
               )}
-            </div>
 
-            <p className="text-[13px] text-stone-600 mt-3.5 leading-relaxed">
-              {isOver24Hours
-                ? `Sudah lebih dari 24 jam akun ${userProfileName} belum memiliki kata sandi. Demi keamanan data keluarga dan anggaran belanja, mohon buat kata sandi baru untuk akun ini sebelum melanjutkan.`
-                : `Ibu baru saja masuk tanpa kata sandi. Silakan buat kata sandi baru untuk melindungi akun ${userProfileName} saat masuk kembali.`}
-            </p>
-
-            {passwordError && (
-              <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-                <span>⚠️</span>
-                <span>{passwordError}</span>
-              </div>
-            )}
-            {passwordSuccess && (
-              <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-                <span>✓</span>
-                <span>{passwordSuccess}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveSecurityPassword} className="py-4 space-y-3.5">
-              <div>
-                <label className="text-xs font-bold text-[#0D0101] block mb-1">
-                  Kata Sandi Baru <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    required
-                    value={newPasswordInput}
-                    onChange={(e) => setNewPasswordInput(e.target.value)}
-                    placeholder="Minimal 6 karakter"
-                    className="w-full px-4 py-2.5 pr-10 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-800 text-xs font-semibold cursor-pointer select-none"
-                    title={showNewPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
-                  >
-                    {showNewPassword ? 'Sembunyi' : 'Lihat'}
-                  </button>
+              <form onSubmit={handleSaveBudget} className="py-4 space-y-4">
+                {/* Tipe Periode Toggle */}
+                <div>
+                  <label className="text-xs font-bold text-[#0D0101] block mb-1.5">
+                    Tipe Periode Budget
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setInputTipeBudget('bulanan')}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        inputTipeBudget === 'bulanan'
+                          ? 'bg-white text-[#0C4B20] shadow-xs'
+                          : 'text-stone-600 hover:text-[#0D0101]'
+                      }`}
+                    >
+                      📅 Budget Bulanan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputTipeBudget('mingguan')}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        inputTipeBudget === 'mingguan'
+                          ? 'bg-white text-[#0C4B20] shadow-xs'
+                          : 'text-stone-600 hover:text-[#0D0101]'
+                      }`}
+                    >
+                      📆 Budget Mingguan
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs font-bold text-[#0D0101] block mb-1">
-                  Ulangi Kata Sandi Baru <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    required
-                    value={confirmPasswordInput}
-                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                    placeholder="Ulangi kata sandi baru"
-                    className="w-full px-4 py-2.5 pr-10 rounded-xl border border-stone-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-800 text-xs font-semibold cursor-pointer select-none"
-                    title={showConfirmPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
-                  >
-                    {showConfirmPassword ? 'Sembunyi' : 'Lihat'}
-                  </button>
+                {/* Input Nominal Budget */}
+                <div>
+                  <label className="text-xs font-bold text-[#0D0101] block mb-1">
+                    {inputTipeBudget === 'mingguan' ? 'Nominal Budget per Minggu (Rp)' : 'Nominal Budget per Bulan (Rp)'}
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-500">
+                      Rp
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      value={inputBudgetNominal}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        if (!raw) {
+                          setInputBudgetNominal('0');
+                          return;
+                        }
+                        const num = parseInt(raw, 10);
+                        setInputBudgetNominal(num.toLocaleString('id-ID'));
+                      }}
+                      placeholder={inputTipeBudget === 'mingguan' ? 'Contoh: 750.000' : 'Contoh: 3.000.000'}
+                      className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-stone-300 text-sm font-bold text-[#0D0101] focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                {!isOver24Hours && (
+                {/* Live Preview Perhitungan */}
+                {(() => {
+                  const num = parseInt(inputBudgetNominal.replace(/\D/g, '') || '0', 10);
+                  const totalBulanan = inputTipeBudget === 'mingguan' ? num * 4 : num;
+                  const perHari = Math.round(totalBulanan / 30);
+                  return (
+                    <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-1.5 text-xs text-[#0D0101]">
+                      <div className="flex items-center justify-between font-bold text-[#0C4B20]">
+                        <span>Total Anggaran 1 Bulan:</span>
+                        <span className="text-sm tabular-nums">Rp {totalBulanan.toLocaleString('id-ID')}</span>
+                      </div>
+                      {inputTipeBudget === 'mingguan' && (
+                        <p className="text-[11px] text-stone-600">
+                          *Dihitung dari Rp {num.toLocaleString('id-ID')} × 4 minggu dalam 1 bulan
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between text-stone-600 pt-1 border-t border-stone-200 text-[11px]">
+                        <span>Estimasi batas aman per hari:</span>
+                        <span className="font-semibold tabular-nums text-[#0D0101]">~Rp {perHari.toLocaleString('id-ID')} / hari</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="pt-2 flex items-center justify-end gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setShowSecurityModal(false)}
+                    onClick={() => setShowBudgetModal(false)}
                     className="min-h-[48px] px-5 py-2.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-bold hover:bg-stone-200 transition cursor-pointer"
                   >
-                    Nanti Saja
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={passwordLoading}
-                  style={{
-                    background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
-                    boxShadow: '0 4px 12px rgba(109, 160, 3, 0.25)',
-                  }}
-                  className="min-h-[48px] px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:brightness-105 transition shadow-sm cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  {passwordLoading ? (
-                    <span>Menyimpan Sandi...</span>
-                  ) : (
-                    <span>Simpan Kata Sandi Akun</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 7. MODAL ATUR BUDGET BELANJA (BULANAN VS MINGGUAN) */}
-      {showBudgetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-stone-200">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-[#EAF5D8] text-[#0C4B20] flex items-center justify-center text-xl shrink-0">
-                  💰
-                </div>
-                <div>
-                  <h3 className="text-[18px] font-extrabold text-[#0D0101] leading-tight">
-                    Atur Budget Belanja
-                  </h3>
-                  <span className="text-[11px] font-bold text-[#0C4B20]">
-                    Porsi Kita • Pengaturan Anggaran Dapur
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowBudgetModal(false)}
-                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-800 cursor-pointer"
-                title="Tutup dialog"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-[13px] text-stone-600 mt-3.5 leading-relaxed">
-              Pilih tipe periode belanja Ibu (bulanan atau mingguan). Jika memilih mingguan, sistem otomatis mengalikan 4 minggu untuk menghitung total anggaran 1 bulan.
-            </p>
-
-            {budgetFeedback.msg && (
-              <div
-                className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
-                  budgetFeedback.type === 'error'
-                    ? 'bg-rose-50 border border-rose-200 text-rose-800'
-                    : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                }`}
-              >
-                <span>{budgetFeedback.type === 'error' ? '⚠️' : '✓'}</span>
-                <span>{budgetFeedback.msg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveBudget} className="py-4 space-y-4">
-              {/* Tipe Periode Toggle */}
-              <div>
-                <label className="text-xs font-bold text-[#0D0101] block mb-1.5">
-                  Tipe Periode Budget
-                </label>
-                <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setInputTipeBudget('bulanan')}
-                    className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      inputTipeBudget === 'bulanan'
-                        ? 'bg-white text-[#0C4B20] shadow-xs'
-                        : 'text-stone-600 hover:text-[#0D0101]'
-                    }`}
-                  >
-                    📅 Budget Bulanan
+                    Batal
                   </button>
                   <button
-                    type="button"
-                    onClick={() => setInputTipeBudget('mingguan')}
-                    className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      inputTipeBudget === 'mingguan'
-                        ? 'bg-white text-[#0C4B20] shadow-xs'
-                        : 'text-stone-600 hover:text-[#0D0101]'
-                    }`}
-                  >
-                    📆 Budget Mingguan
-                  </button>
-                </div>
-              </div>
-
-              {/* Input Nominal Budget */}
-              <div>
-                <label className="text-xs font-bold text-[#0D0101] block mb-1">
-                  {inputTipeBudget === 'mingguan' ? 'Nominal Budget per Minggu (Rp)' : 'Nominal Budget per Bulan (Rp)'}
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-500">
-                    Rp
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={inputBudgetNominal}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/\D/g, '');
-                      if (!raw) {
-                        setInputBudgetNominal('0');
-                        return;
-                      }
-                      const num = parseInt(raw, 10);
-                      setInputBudgetNominal(num.toLocaleString('id-ID'));
+                    type="submit"
+                    disabled={budgetSaving}
+                    style={{
+                      background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
+                      boxShadow: '0 4px 12px rgba(109, 160, 3, 0.25)',
                     }}
-                    placeholder={inputTipeBudget === 'mingguan' ? 'Contoh: 750.000' : 'Contoh: 3.000.000'}
-                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-stone-300 text-sm font-bold text-[#0D0101] focus:outline-none focus:ring-2 focus:ring-[#0C4B20]"
-                  />
+                    className="min-h-[48px] px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:brightness-105 transition shadow-sm cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {budgetSaving ? 'Menyimpan...' : 'Simpan Budget Belanja'}
+                  </button>
                 </div>
-              </div>
-
-              {/* Live Preview Perhitungan */}
-              {(() => {
-                const num = parseInt(inputBudgetNominal.replace(/\D/g, '') || '0', 10);
-                const totalBulanan = inputTipeBudget === 'mingguan' ? num * 4 : num;
-                const perHari = Math.round(totalBulanan / 30);
-                return (
-                  <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-1.5 text-xs text-[#0D0101]">
-                    <div className="flex items-center justify-between font-bold text-[#0C4B20]">
-                      <span>Total Anggaran 1 Bulan:</span>
-                      <span className="text-sm tabular-nums">Rp {totalBulanan.toLocaleString('id-ID')}</span>
-                    </div>
-                    {inputTipeBudget === 'mingguan' && (
-                      <p className="text-[11px] text-stone-600">
-                        *Dihitung dari Rp {num.toLocaleString('id-ID')} × 4 minggu dalam 1 bulan
-                      </p>
-                    )}
-                    <div className="flex items-center justify-between text-stone-600 pt-1 border-t border-stone-200 text-[11px]">
-                      <span>Estimasi batas aman per hari:</span>
-                      <span className="font-semibold tabular-nums text-[#0D0101]">~Rp {perHari.toLocaleString('id-ID')} / hari</span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setShowBudgetModal(false)}
-                  className="min-h-[48px] px-5 py-2.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-bold hover:bg-stone-200 transition cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={budgetSaving}
-                  style={{
-                    background: 'linear-gradient(90deg, #6DA003 0%, #82BD03 100%)',
-                    boxShadow: '0 4px 12px rgba(109, 160, 3, 0.25)',
-                  }}
-                  className="min-h-[48px] px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:brightness-105 transition shadow-sm cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  {budgetSaving ? 'Menyimpan...' : 'Simpan Budget Belanja'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
