@@ -67,6 +67,19 @@ export default function DompetBulananPage() {
   const [isExitingDeleteWarungModal, setIsExitingDeleteWarungModal] = useState(false);
   const [isDeletingWarung, setIsDeletingWarung] = useState(false);
 
+  // Warung Edit Modal State with entrance & exit animations
+  const [editWarungTarget, setEditWarungTarget] = useState<WarungLangganan | null>(null);
+  const [isExitingEditWarungModal, setIsExitingEditWarungModal] = useState(false);
+  const [editWarungNameInput, setEditWarungNameInput] = useState('');
+  const [editWarungTagInput, setEditWarungTagInput] = useState('Warung Langganan');
+  const [isUpdatingWarung, setIsUpdatingWarung] = useState(false);
+  const [editWarungErrorMsg, setEditWarungErrorMsg] = useState('');
+
+  // Transaction Deletion Confirmation Modal State
+  const [deleteTxTarget, setDeleteTxTarget] = useState<TransaksiItem | null>(null);
+  const [isExitingDeleteTxModal, setIsExitingDeleteTxModal] = useState(false);
+  const [isDeletingTx, setIsDeletingTx] = useState(false);
+
   // Sinkronisasi data keuangan real-time dari Database PostgreSQL
   const loadRealtimeFinance = async () => {
     setLoading(true);
@@ -400,11 +413,241 @@ export default function DompetBulananPage() {
     }
   };
 
+  // Edit Warung Handlers with animation & toast
+  const handleOpenEditWarungModal = (warung: WarungLangganan, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditWarungTarget(warung);
+    setEditWarungNameInput(warung.nama);
+    setEditWarungTagInput(warung.tag || 'Warung Langganan');
+    setEditWarungErrorMsg('');
+    setIsExitingEditWarungModal(false);
+  };
+
+  const handleCloseEditWarungModal = () => {
+    if (isUpdatingWarung) return;
+    setIsExitingEditWarungModal(true);
+    setTimeout(() => {
+      setEditWarungTarget(null);
+      setIsExitingEditWarungModal(false);
+    }, 200);
+  };
+
+  const handleSaveEditWarungSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editWarungTarget) return;
+    const trimmed = editWarungNameInput.trim();
+    if (!trimmed) {
+      setEditWarungErrorMsg('Silakan masukkan nama warung atau pedagang.');
+      return;
+    }
+
+    const oldName = editWarungTarget.nama;
+    const targetId = editWarungTarget.id;
+
+    // Cek nama kembar dengan warung lain
+    const conflict = warungs.some(
+      (w) => w.id !== targetId && w.nama.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (conflict) {
+      setEditWarungErrorMsg(`Warung "${trimmed}" sudah terdaftar di daftar warung keluarga.`);
+      return;
+    }
+
+    setIsUpdatingWarung(true);
+    setEditWarungErrorMsg('');
+
+    try {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {}
+
+      const res = await fetch('/api/family/transaction', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'edit_warung',
+          id: targetId,
+          nama_warung: trimmed,
+          tag: editWarungTagInput || 'Warung Langganan',
+          phone: meta?.phone,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Gagal mengubah data warung');
+      }
+
+      setWarungs((prev) =>
+        prev.map((w) =>
+          w.id === targetId || w.nama === oldName
+            ? { ...w, nama: trimmed, tag: editWarungTagInput || w.tag }
+            : w
+        )
+      );
+
+      // Perbarui label merchant di transaksi lokal
+      setTransactions((prev) =>
+        prev.map((t) => (t.merchant === oldName ? { ...t, merchant: trimmed } : t))
+      );
+
+      if (selectedMerchantFilter === oldName) setSelectedMerchantFilter(trimmed);
+      if (modalMerchant === oldName) setModalMerchant(trimmed);
+
+      setIsExitingEditWarungModal(true);
+      setTimeout(() => {
+        setEditWarungTarget(null);
+        setIsExitingEditWarungModal(false);
+        setIsUpdatingWarung(false);
+      }, 200);
+
+      toast.success(
+        `Nama warung berhasil diubah menjadi "${trimmed}".`,
+        'Warung Diperbarui'
+      );
+    } catch (err: any) {
+      console.warn('Gagal mengubah data warung:', err);
+      // Fallback update lokal
+      setWarungs((prev) =>
+        prev.map((w) =>
+          w.id === targetId || w.nama === oldName
+            ? { ...w, nama: trimmed, tag: editWarungTagInput || w.tag }
+            : w
+        )
+      );
+      setTransactions((prev) =>
+        prev.map((t) => (t.merchant === oldName ? { ...t, merchant: trimmed } : t))
+      );
+
+      setIsExitingEditWarungModal(true);
+      setTimeout(() => {
+        setEditWarungTarget(null);
+        setIsExitingEditWarungModal(false);
+        setIsUpdatingWarung(false);
+      }, 200);
+
+      toast.success(`Warung "${trimmed}" berhasil diperbarui.`, 'Warung Diperbarui');
+    }
+  };
+
+  // Delete Transaction Handlers
+  const handleOpenDeleteTxModal = (tx: TransaksiItem) => {
+    setDeleteTxTarget(tx);
+    setIsExitingDeleteTxModal(false);
+  };
+
+  const handleCloseDeleteTxModal = () => {
+    if (isDeletingTx) return;
+    setIsExitingDeleteTxModal(true);
+    setTimeout(() => {
+      setDeleteTxTarget(null);
+      setIsExitingDeleteTxModal(false);
+    }, 200);
+  };
+
+  const handleConfirmDeleteTx = async () => {
+    if (!deleteTxTarget) return;
+    const target = deleteTxTarget;
+    setIsDeletingTx(true);
+
+    try {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {}
+
+      const res = await fetch('/api/family/transaction', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_transaction',
+          transaction_id: target.id,
+          phone: meta?.phone,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.total_anggaran !== undefined) setTotalBudget(data.total_anggaran);
+        if (data.pengeluaran !== undefined) setUsedBudget(data.pengeluaran);
+        if (data.saldo !== undefined) setRemainingBalance(data.saldo);
+      } else {
+        // Fallback hitung lokal jika offline
+        if (target.type === 'expense') {
+          setUsedBudget((prev) => Math.max(0, prev - target.amount));
+          setRemainingBalance((prev) => prev + target.amount);
+        } else {
+          setTotalBudget((prev) => Math.max(0, prev - target.amount));
+          setRemainingBalance((prev) => Math.max(0, prev - target.amount));
+        }
+      }
+
+      setTransactions((prev) => prev.filter((t) => t.id !== target.id));
+
+      // Update totalSpent pada warung terkait jika jenis expense
+      if (target.type === 'expense') {
+        setWarungs((prev) =>
+          prev.map((w) =>
+            w.nama === target.merchant
+              ? {
+                  ...w,
+                  count: Math.max(0, w.count - 1),
+                  totalSpent: Math.max(0, w.totalSpent - target.amount),
+                }
+              : w
+          )
+        );
+      }
+
+      setIsExitingDeleteTxModal(true);
+      setTimeout(() => {
+        setDeleteTxTarget(null);
+        setIsExitingDeleteTxModal(false);
+        setIsDeletingTx(false);
+      }, 200);
+
+      toast.success(
+        `Catatan "${target.desc}" berhasil dihapus dan saldo utama ter-update!`,
+        'Transaksi Dihapus'
+      );
+    } catch (err) {
+      console.warn('Gagal menghapus transaksi:', err);
+      // Fallback update lokal
+      if (target.type === 'expense') {
+        setUsedBudget((prev) => Math.max(0, prev - target.amount));
+        setRemainingBalance((prev) => prev + target.amount);
+      } else {
+        setTotalBudget((prev) => Math.max(0, prev - target.amount));
+        setRemainingBalance((prev) => Math.max(0, prev - target.amount));
+      }
+      setTransactions((prev) => prev.filter((t) => t.id !== target.id));
+
+      setIsExitingDeleteTxModal(true);
+      setTimeout(() => {
+        setDeleteTxTarget(null);
+        setIsExitingDeleteTxModal(false);
+        setIsDeletingTx(false);
+      }, 200);
+
+      toast.success(
+        `Catatan "${target.desc}" berhasil dihapus.`,
+        'Transaksi Dihapus'
+      );
+    }
+  };
+
   // Keyboard shortcut listener for closing modals (Esc)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (deleteWarungTarget && !isDeletingWarung) {
+        if (deleteTxTarget && !isDeletingTx) {
+          handleCloseDeleteTxModal();
+        } else if (editWarungTarget && !isUpdatingWarung) {
+          handleCloseEditWarungModal();
+        } else if (deleteWarungTarget && !isDeletingWarung) {
           handleCloseDeleteWarungModal();
         } else if (warungModalOpen && !isSavingWarung) {
           handleCloseWarungModal();
@@ -415,7 +658,17 @@ export default function DompetBulananPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deleteWarungTarget, isDeletingWarung, warungModalOpen, isSavingWarung, modalOpen]);
+  }, [
+    deleteTxTarget,
+    isDeletingTx,
+    editWarungTarget,
+    isUpdatingWarung,
+    deleteWarungTarget,
+    isDeletingWarung,
+    warungModalOpen,
+    isSavingWarung,
+    modalOpen,
+  ]);
 
   // Handle amount change with Indonesian thousand separator
   const handleAmountInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -876,7 +1129,7 @@ export default function DompetBulananPage() {
                                       </div>
                                     </div>
 
-                                    <div className="flex items-center gap-3 shrink-0 ml-2">
+                                    <div className="flex items-center gap-2 shrink-0 ml-2">
                                       <span
                                         className={`font-mono font-bold text-[15px] sm:text-[17px] whitespace-nowrap ${
                                           isExp ? 'text-[#2c1514]' : 'text-[#306a3b]'
@@ -891,6 +1144,18 @@ export default function DompetBulananPage() {
                                         className="min-h-[40px] px-3.5 rounded-xl bg-[#fff0ef] hover:bg-[#ffe2df] text-[#2c1514] text-[12px] font-semibold transition-colors cursor-pointer"
                                       >
                                         Ubah
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenDeleteTxModal(item)}
+                                        className="min-h-[40px] w-10 rounded-xl bg-stone-100 hover:bg-rose-50 text-stone-400 hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                                        title={`Hapus catatan ${item.desc}`}
+                                        aria-label={`Hapus catatan ${item.desc}`}
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
                                       </button>
                                     </div>
                                   </div>
@@ -1018,6 +1283,17 @@ export default function DompetBulananPage() {
                             <span className="px-2 py-0.5 rounded-full bg-[#b2f2b6] text-[#367041] text-[10px] font-bold whitespace-nowrap">
                               {w.tag}
                             </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenEditWarungModal(w, e)}
+                              className="w-7 h-7 rounded-lg bg-stone-100 hover:bg-emerald-50 text-stone-400 hover:text-[#306a3b] flex items-center justify-center transition-colors cursor-pointer"
+                              title={`Ubah data ${w.nama}`}
+                              aria-label={`Ubah data ${w.nama}`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => handleOpenDeleteWarungModal(w, e)}
@@ -1591,6 +1867,249 @@ export default function DompetBulananPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                     <span>Ya, Hapus Warung</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. POP-UP MODAL EDIT DATA WARUNG (ANIMASI MASUK & KELUAR) */}
+      {editWarungTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-warung-modal-title"
+          className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto ${
+            isExitingEditWarungModal ? 'animate-fadeOut' : 'animate-fadeIn'
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isUpdatingWarung) {
+              handleCloseEditWarungModal();
+            }
+          }}
+        >
+          <div
+            className={`bg-white w-full max-w-sm sm:max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl border border-stone-200/90 space-y-5 my-8 relative ${
+              isExitingEditWarungModal ? 'animate-scaleOut' : 'animate-scaleIn'
+            }`}
+          >
+            {/* Header Modal */}
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-[#EAF5D8] text-[#306a3b] flex items-center justify-center text-xl shrink-0">
+                  ✏️
+                </div>
+                <div>
+                  <h3 id="edit-warung-modal-title" className="text-[18px] sm:text-[19px] font-extrabold text-[#2c1514] leading-tight">
+                    Ubah Data Warung
+                  </h3>
+                  <p className="text-[12px] text-[#737a65] font-semibold mt-0.5">
+                    Perbarui nama atau kategori langganan
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseEditWarungModal}
+                disabled={isUpdatingWarung}
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-[#737a65] hover:text-[#2c1514] flex items-center justify-center transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                aria-label="Tutup Form Edit Warung"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Error Alert Box */}
+            {editWarungErrorMsg && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[12px] font-semibold flex items-center gap-2 animate-alertEnter">
+                <svg className="w-4 h-4 shrink-0 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>{editWarungErrorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEditWarungSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-bold text-[#2c1514] flex items-center justify-between">
+                  <span>Nama Warung / Pedagang</span>
+                  <span className="text-[11px] text-rose-600 font-semibold">*Wajib diisi</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={editWarungNameInput}
+                  onChange={(e) => {
+                    setEditWarungNameInput(e.target.value);
+                    if (editWarungErrorMsg) setEditWarungErrorMsg('');
+                  }}
+                  placeholder="Contoh: Warung Sayur Bu Ani"
+                  className="w-full min-h-[48px] px-4 rounded-2xl bg-[#fff0ef] text-[15px] font-bold text-[#2c1514] border border-stone-200/60 focus:outline-none focus:ring-2 focus:ring-[#306a3b] transition"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-bold text-[#2c1514]">
+                  Kategori / Jenis Dagangan
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { tag: 'Warung Langganan', icon: '⭐' },
+                    { tag: 'Warung Sayur', icon: '🥬' },
+                    { tag: 'Daging & Ayam', icon: '🍗' },
+                    { tag: 'Ikan & Seafood', icon: '🐟' },
+                    { tag: 'Toko Sembako', icon: '🍚' },
+                    { tag: 'Pasar Tradisional', icon: '🏪' },
+                  ].map((item) => (
+                    <button
+                      key={item.tag}
+                      type="button"
+                      onClick={() => setEditWarungTagInput(item.tag)}
+                      className={`min-h-[42px] px-3 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        editWarungTagInput === item.tag
+                          ? 'bg-[#306a3b] text-white border-[#306a3b] shadow-xs'
+                          : 'bg-[#fff0ef] text-[#737a65] border-transparent hover:bg-[#ffe2df]'
+                      }`}
+                    >
+                      <span>{item.icon}</span>
+                      <span>{item.tag}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleCloseEditWarungModal}
+                  disabled={isUpdatingWarung}
+                  className="min-h-[48px] px-5 rounded-full border border-stone-300 hover:bg-stone-100 text-[#2c1514] text-[13px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingWarung || !editWarungNameInput.trim()}
+                  className="flex-1 min-h-[48px] rounded-full bg-[#306a3b] hover:bg-[#155126] text-white font-bold text-[14px] shadow-md shadow-[#306a3b]/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isUpdatingWarung ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Menyimpan Perubahan...</span>
+                    </>
+                  ) : (
+                    <span>Simpan Perubahan Warung</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. POP-UP MODAL KONFIRMASI HAPUS TRANSAKSI (ANIMASI MASUK & KELUAR) */}
+      {deleteTxTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-tx-modal-title"
+          className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto ${
+            isExitingDeleteTxModal ? 'animate-fadeOut' : 'animate-fadeIn'
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingTx) {
+              handleCloseDeleteTxModal();
+            }
+          }}
+        >
+          <div
+            className={`bg-white w-full max-w-sm sm:max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl border border-stone-200/90 space-y-5 my-8 relative ${
+              isExitingDeleteTxModal ? 'animate-scaleOut' : 'animate-scaleIn'
+            }`}
+          >
+            {/* Header Modal */}
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0 shadow-2xs">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 id="delete-tx-modal-title" className="text-[18px] sm:text-[19px] font-extrabold text-[#2c1514] leading-tight">
+                  Hapus Catatan Transaksi?
+                </h3>
+                <p className="text-[12px] text-[#737a65] font-semibold mt-0.5">
+                  Porsi Kita • Dompet Bulanan Keluarga
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseDeleteTxModal}
+                disabled={isDeletingTx}
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-[#737a65] hover:text-[#2c1514] flex items-center justify-center transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                aria-label="Batal Hapus Transaksi"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-stone-200/70 text-[13px] sm:text-[14px] text-[#4a403d] leading-relaxed space-y-2">
+              <p>
+                Apakah Ibu/Ayah yakin ingin menghapus catatan{' '}
+                <strong className="text-[#2c1514] font-extrabold underline decoration-rose-300">
+                  {deleteTxTarget.desc}
+                </strong>{' '}
+                sebesar{' '}
+                <strong className="font-mono font-bold text-[#ba1a1a]">
+                  {formatRp(deleteTxTarget.amount)}
+                </strong>
+                ?
+              </p>
+              <div className="flex items-center gap-2 pt-2 border-t border-stone-200/60 text-emerald-800 text-[12px] font-semibold">
+                <svg className="w-4 h-4 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Saldo utama dan total pengeluaran akan otomatis dihitung ulang.</span>
+              </div>
+            </div>
+
+            {/* Action Buttons: Min 48px Touch Target */}
+            <div className="flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleCloseDeleteTxModal}
+                disabled={isDeletingTx}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl border-2 border-stone-200 hover:border-stone-300 hover:bg-stone-100 text-[#2c1514] font-bold text-[14px] transition min-h-[48px] flex items-center justify-center cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTx}
+                disabled={isDeletingTx}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-[14px] shadow-md shadow-rose-600/25 transition min-h-[48px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
+              >
+                {isDeletingTx ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Menghapus...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>Ya, Hapus Catatan</span>
                   </>
                 )}
               </button>

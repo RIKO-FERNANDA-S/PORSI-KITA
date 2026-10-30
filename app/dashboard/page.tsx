@@ -13,14 +13,36 @@ import {
   getStoredBelanjaChecked,
   saveStoredBelanjaChecked,
 } from '../../lib/store';
-import { buatDaftarBelanjaMingguan } from '../../lib/planner/cost';
+import { buatDaftarBelanjaMingguan, formatKuantitasBahan } from '../../lib/planner/cost';
 import { RencanaMenu7Hari, MenuHari } from '../../lib/types';
+import { RESEP_MAP, BAHAN_MAP } from '../../lib/data/dataset';
 
 interface ShoppingItem {
   id: string;
   name: string;
   price: number;
   checked: boolean;
+}
+
+// Helper kalkulasi biaya hidangan/resep sesuai standar BDD Kemenkes (PRD 8.8):
+// Biaya Bahan = (jumlah_gram / (bdd_percent / 100)) / 100 * harga_per_100g_rp
+export function hitungBiayaDish(dish: any): number {
+  if (!dish) return 0;
+  const master = RESEP_MAP.get(dish.kode);
+  if (master && master.bahan && master.bahan.length > 0) {
+    let total = 0;
+    for (const b of master.bahan) {
+      const bahanInfo = BAHAN_MAP.get(b.kode_tkpi);
+      const bdd = ((bahanInfo?.bdd_percent || 100) > 0 ? (bahanInfo?.bdd_percent || 100) : 100) / 100;
+      const harga100g = (bahanInfo?.harga_per_100g_rp && bahanInfo.harga_per_100g_rp > 0) ? bahanInfo.harga_per_100g_rp : 1500;
+      total += (b.jumlah_gram / bdd / 100) * harga100g;
+    }
+    if (total > 0) return Math.round(total);
+  }
+  if (dish.biaya_per_porsi_rp && dish.biaya_per_porsi_rp > 0) {
+    return Math.round(dish.biaya_per_porsi_rp);
+  }
+  return 0;
 }
 
 // Icon lapak pasar tradisional (sinkron dengan app/belanja/[id])
@@ -125,14 +147,16 @@ export default function DashboardPage() {
       }
       if (storedMenu) {
         setRencanaMenu(storedMenu);
+        const storedChecked = getStoredBelanjaChecked(storedMenu.id);
+        setCheckedMap(storedChecked);
+      } else {
+        const storedChecked = getStoredBelanjaChecked();
+        setCheckedMap(storedChecked);
       }
 
-      // Restore preferensi stok kulkas & checklist
+      // Restore preferensi stok kulkas
       const storedFridge = getStoredKulkas();
       setFridgeMap(storedFridge);
-
-      const storedChecked = getStoredBelanjaChecked();
-      setCheckedMap(storedChecked);
     } catch (e) {
       console.warn('Inisialisasi lokal fallback notice:', e);
     }
@@ -146,6 +170,19 @@ export default function DashboardPage() {
           try {
             localStorage.setItem('porsi_kita_rencana_menu_7hari', JSON.stringify(data.menu));
           } catch {}
+
+          if (data.menu.belanja_checked) {
+            setCheckedMap((prev) => {
+              const merged = { ...prev, ...data.menu.belanja_checked };
+              saveStoredBelanjaChecked(merged, data.menu.id);
+              return merged;
+            });
+          } else {
+            const checkedForPlan = getStoredBelanjaChecked(data.menu.id);
+            if (Object.keys(checkedForPlan).length > 0) {
+              setCheckedMap(checkedForPlan);
+            }
+          }
         }
       })
       .catch((err) => console.warn('Gagal sinkronisasi menu dari database di dashboard:', err));
@@ -254,6 +291,31 @@ export default function DashboardPage() {
 
     checkSecurityStatus();
   }, []);
+
+  // Sinkronisasi realtime checklist bahan belanja dengan halaman Belanja & database
+  useEffect(() => {
+    const handleChecklistUpdated = (e: any) => {
+      if (e.detail?.map) {
+        setCheckedMap(e.detail.map);
+      } else {
+        setCheckedMap(getStoredBelanjaChecked(rencanaMenu?.id));
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key?.includes('porsi_kita_belanja_checked') || e.key === 'porsi_kita_stok_kulkas') {
+        setCheckedMap(getStoredBelanjaChecked(rencanaMenu?.id));
+        setFridgeMap(getStoredKulkas());
+      }
+    };
+
+    window.addEventListener('porsi-checklist-updated', handleChecklistUpdated);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('porsi-checklist-updated', handleChecklistUpdated);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [rencanaMenu?.id]);
 
   // Format pembagian porsi keluarga dari data anggota database
   const getDynamicPortionString = (porsiList?: any[]) => {
@@ -480,15 +542,12 @@ export default function DashboardPage() {
     for (const it of rawDaftarBelanja) {
       const isFridge = !!fridgeMap[it.kode_tkpi];
       const isChecked = !!checkedMap[it.kode_tkpi];
-      const gramStr =
-        it.kebutuhan_beli_gram >= 1000
-          ? `${(it.kebutuhan_beli_gram / 1000).toFixed(1)} kg`
-          : `${it.kebutuhan_beli_gram}g`;
+      const kuantitasStr = formatKuantitasBahan(it.nama_bahan, it.kebutuhan_beli_gram);
 
       list.push({
         id: it.kode_tkpi,
         kode_tkpi: it.kode_tkpi,
-        name: `${it.nama_bahan} (${gramStr})`,
+        name: `${it.nama_bahan} (${kuantitasStr})`,
         nama_bahan: it.nama_bahan,
         kategori: it.kategori,
         kebutuhan_beli_gram: it.kebutuhan_beli_gram,
@@ -559,7 +618,20 @@ export default function DashboardPage() {
         ...prev,
         [id]: !prev[id],
       };
-      saveStoredBelanjaChecked(next);
+      saveStoredBelanjaChecked(next, rencanaMenu?.id);
+
+      // Background persistensi ke database Supabase meal_plans.hasil_json
+      if (rencanaMenu?.id) {
+        fetch('/api/menu', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: rencanaMenu.id,
+            belanja_checked: next,
+          }),
+        }).catch((e) => console.warn('Background sync checklist error:', e));
+      }
+
       return next;
     });
   };
@@ -1041,7 +1113,7 @@ export default function DashboardPage() {
                         const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP013.webp';
                         const pagiCostNum = pagiSesi.hidangan.reduce((acc, h) => {
                           const totalPengali = pagiSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
-                          return acc + (h.biaya_per_porsi_rp || 0) * totalPengali;
+                          return acc + hitungBiayaDish(h) * totalPengali;
                         }, 0);
                         const pagiCost = `Rp ${Math.round(pagiCostNum).toLocaleString('id-ID')}`;
                         const pagiPortion = getDynamicPortionString(pagiSesi.porsi_per_anggota);
@@ -1116,7 +1188,7 @@ export default function DashboardPage() {
                                         </div>
                                       </div>
                                       <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
-                                        Rp {dish.biaya_per_porsi_rp.toLocaleString('id-ID')}
+                                        Rp {hitungBiayaDish(dish).toLocaleString('id-ID')}
                                       </span>
                                     </div>
                                   ))}
@@ -1162,7 +1234,7 @@ export default function DashboardPage() {
                         const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP008.webp';
                         const siangCostNum = siangSesi.hidangan.reduce((acc, h) => {
                           const totalPengali = siangSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
-                          return acc + (h.biaya_per_porsi_rp || 0) * totalPengali;
+                          return acc + hitungBiayaDish(h) * totalPengali;
                         }, 0);
                         const siangCost = `Rp ${Math.round(siangCostNum).toLocaleString('id-ID')}`;
                         const siangPortion = getDynamicPortionString(siangSesi.porsi_per_anggota);
@@ -1237,7 +1309,7 @@ export default function DashboardPage() {
                                         </div>
                                       </div>
                                       <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
-                                        Rp {dish.biaya_per_porsi_rp.toLocaleString('id-ID')}
+                                        Rp {hitungBiayaDish(dish).toLocaleString('id-ID')}
                                       </span>
                                     </div>
                                   ))}
@@ -1283,7 +1355,7 @@ export default function DashboardPage() {
                         const fotoUrl = mainDish?.kode ? `/images/resep/${mainDish.kode}.webp` : '/images/resep/RSP010.webp';
                         const malamCostNum = malamSesi.hidangan.reduce((acc, h) => {
                           const totalPengali = malamSesi.porsi_per_anggota?.reduce((sum, p) => sum + p.pengali, 0) || 1;
-                          return acc + (h.biaya_per_porsi_rp || 0) * totalPengali;
+                          return acc + hitungBiayaDish(h) * totalPengali;
                         }, 0);
                         const malamCost = `Rp ${Math.round(malamCostNum).toLocaleString('id-ID')}`;
                         const malamPortion = getDynamicPortionString(malamSesi.porsi_per_anggota);
@@ -1364,7 +1436,7 @@ export default function DashboardPage() {
                                         </div>
                                       </div>
                                       <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
-                                        Rp {dish.biaya_per_porsi_rp.toLocaleString('id-ID')}
+                                        Rp {hitungBiayaDish(dish).toLocaleString('id-ID')}
                                       </span>
                                     </div>
                                   ))}
@@ -1381,7 +1453,7 @@ export default function DashboardPage() {
                                     title: 'Makan Malam Keluarga',
                                     session: 'MAKAN MALAM • 18:30 WIB',
                                     cost: malamCost,
-                                    tags: ['Ramah Pencernaan', 'Kalsium Tulang', 'Serat Halus'],
+                                    tags: ['Cerna Nyaman Malam', 'Serat & Vitamin Sayur', 'Keluarga Sehat'],
                                     portionDetail: malamPortion,
                                     dishes: malamSesi.hidangan,
                                   })
@@ -1694,34 +1766,90 @@ export default function DashboardPage() {
 
               {/* Rincian Hidangan Masakan */}
               {selectedRecipe.dishes && selectedRecipe.dishes.length > 0 && (
-                <div>
-                  <span className="font-bold text-[#0D0101] block mb-2 text-xs uppercase tracking-wider text-stone-500">
+                <div className="space-y-3">
+                  <span className="font-bold text-[#0D0101] block text-xs uppercase tracking-wider text-stone-500">
                     Hidangan dalam Sesi Ini ({selectedRecipe.dishes.length} Masakan):
                   </span>
-                  <div className="space-y-2">
-                    {selectedRecipe.dishes.map((d: any) => (
-                      <div
-                        key={d.kode}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50 border border-stone-200/70 gap-2"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <img
-                            src={`/images/resep/${d.kode}.webp`}
-                            alt={d.nama}
-                            className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
-                          />
-                          <div className="min-w-0">
-                            <h5 className="font-bold text-[13px] text-[#0D0101] truncate">{d.nama}</h5>
-                            <span className="text-[11px] text-stone-500 block truncate">
-                              {d.kategori} • {d.gizi_per_porsi?.energi_kcal} kkal
-                            </span>
+                  <div className="space-y-3">
+                    {selectedRecipe.dishes.map((d: any) => {
+                      const master = RESEP_MAP.get(d.kode);
+                      const dishBiaya = hitungBiayaDish(d);
+                      const bahanList = master?.bahan || d.bahan || [];
+
+                      return (
+                        <div
+                          key={d.kode}
+                          className="p-3 rounded-2xl bg-stone-50 border border-stone-200/70 space-y-2.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <img
+                                src={`/images/resep/${d.kode}.webp`}
+                                alt={d.nama}
+                                className="w-10 h-10 rounded-lg object-cover bg-stone-200 shrink-0 border border-stone-200/50"
+                              />
+                              <div className="min-w-0">
+                                <h5 className="font-bold text-[13.5px] text-[#0D0101] truncate">{d.nama}</h5>
+                                <span className="text-[11px] text-stone-500 block truncate">
+                                  {d.kategori} • {d.gizi_per_porsi?.energi_kcal} kkal
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-[12px] font-bold text-[#0C4B20] font-mono block">
+                                Rp {dishBiaya.toLocaleString('id-ID')}
+                              </span>
+                              <span className="text-[10px] text-stone-400">per porsi</span>
+                            </div>
                           </div>
+
+                          {/* Tabel Rincian Bahan Masakan & Rumus BDD */}
+                          {bahanList.length > 0 && (
+                            <div className="mt-1 pt-2 border-t border-stone-200/60">
+                              <span className="text-[10.5px] font-semibold text-stone-500 block mb-1">
+                                Rincian Bahan Baku &amp; BDD Kemenkes:
+                              </span>
+                              <div className="overflow-x-auto rounded-xl border border-stone-200/60 bg-white">
+                                <table className="w-full text-left text-[11px]">
+                                  <thead className="bg-stone-50 text-stone-500 font-semibold uppercase text-[9.5px]">
+                                    <tr>
+                                      <th className="py-1.5 px-2">Bahan</th>
+                                      <th className="py-1.5 px-2">Takaran</th>
+                                      <th className="py-1.5 px-2">BDD %</th>
+                                      <th className="py-1.5 px-2 text-right">Est. Harga</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-stone-100">
+                                    {bahanList.map((bItem: any, bIdx: number) => {
+                                      const bInfo = BAHAN_MAP.get(bItem.kode_tkpi);
+                                      const bddFactor = ((bInfo?.bdd_percent || 100) > 0 ? (bInfo?.bdd_percent || 100) : 100) / 100;
+                                      const harga100g = (bInfo?.harga_per_100g_rp && bInfo.harga_per_100g_rp > 0) ? bInfo.harga_per_100g_rp : 1500;
+                                      const bCost = Math.round((bItem.jumlah_gram / bddFactor / 100) * harga100g);
+                                      return (
+                                        <tr key={bIdx} className="hover:bg-stone-50">
+                                          <td className="py-1 px-2 font-medium text-stone-800">
+                                            {bInfo?.nama || bItem.nama_bahan || bItem.kode_tkpi}
+                                          </td>
+                                          <td className="py-1 px-2 text-stone-600 font-mono">
+                                            {formatKuantitasBahan(bInfo?.nama || bItem.nama_bahan, bItem.jumlah_gram)}
+                                          </td>
+                                          <td className="py-1 px-2 text-stone-500">
+                                            {bInfo?.bdd_percent || 100}%
+                                          </td>
+                                          <td className="py-1 px-2 text-right font-mono font-semibold text-[#0C4B20]">
+                                            Rp {bCost.toLocaleString('id-ID')}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <span className="text-[11px] font-bold text-[#0C4B20] font-mono shrink-0 ml-1">
-                          Rp {d.biaya_per_porsi_rp?.toLocaleString('id-ID')}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

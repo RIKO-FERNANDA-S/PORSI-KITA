@@ -16,7 +16,7 @@ import {
   getStoredBelanjaChecked,
   saveStoredBelanjaChecked,
 } from '../../../lib/store';
-import { buatDaftarBelanjaMingguan } from '../../../lib/planner/cost';
+import { buatDaftarBelanjaMingguan, formatKuantitasBahan } from '../../../lib/planner/cost';
 
 interface TitipanItem {
   id: string;
@@ -163,8 +163,12 @@ function BelanjaContent({ params }: PageProps) {
 
           setFridgeMap(initialFridge);
 
-          // Restore preferensi checklist belanja
-          const initialChecked = getStoredBelanjaChecked();
+          // Restore preferensi checklist belanja (tersinkron ID menu & DB)
+          const planId = currentPlanId || m?.id;
+          const initialChecked = getStoredBelanjaChecked(planId);
+          if ((m as any)?.checklist) {
+            Object.assign(initialChecked, (m as any).checklist);
+          }
           setCheckedMap(initialChecked);
         }
       } catch (e) {
@@ -176,6 +180,27 @@ function BelanjaContent({ params }: PageProps) {
 
     loadData();
   }, []);
+
+  // Sinkronisasi realtime event checklist dengan Beranda & Tab Lain
+  useEffect(() => {
+    const handleChecklistUpdated = (e: any) => {
+      const updatedMap = e.detail?.map;
+      if (updatedMap) {
+        setCheckedMap(updatedMap);
+      }
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key?.startsWith('porsi_kita_belanja_checked')) {
+        setCheckedMap(getStoredBelanjaChecked(currentPlanId || rencanaMenu?.id));
+      }
+    };
+    window.addEventListener('porsi-checklist-updated', handleChecklistUpdated);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('porsi-checklist-updated', handleChecklistUpdated);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [currentPlanId, rencanaMenu?.id]);
 
   // Recalculate saat periode filter berubah (1 Minggu / 3 Hari / Hari Ini)
   useEffect(() => {
@@ -331,14 +356,23 @@ function BelanjaContent({ params }: PageProps) {
     return daftarBelanja.filter((item) => fridgeMap[item.kode_tkpi]);
   }, [daftarBelanja, fridgeMap]);
 
-  // Toggle checklist beli per item
+  // Toggle checklist beli per item (tersimpan persisten & tersinkron ke Beranda)
   const toggleCheck = (kodeTkpi: string) => {
     setCheckedMap((prev) => {
       const next = {
         ...prev,
         [kodeTkpi]: !prev[kodeTkpi],
       };
-      saveStoredBelanjaChecked(next);
+      const planId = currentPlanId || rencanaMenu?.id;
+      saveStoredBelanjaChecked(next, planId);
+
+      // Sinkronisasi background ke database Supabase
+      fetch('/api/menu', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: next, meal_plan_id: planId }),
+      }).catch(() => {});
+
       return next;
     });
   };
@@ -354,7 +388,15 @@ function BelanjaContent({ params }: PageProps) {
       nextMap[it.kode_tkpi] = !allChecked;
     });
     setCheckedMap(nextMap);
-    saveStoredBelanjaChecked(nextMap);
+    const planId = currentPlanId || rencanaMenu?.id;
+    saveStoredBelanjaChecked(nextMap, planId);
+
+    fetch('/api/menu', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checklist: nextMap, meal_plan_id: planId }),
+    }).catch(() => {});
+
     showToast(
       allChecked
         ? 'Semua bahan di lapak ini ditandai belum dibeli.'
@@ -460,10 +502,7 @@ function BelanjaContent({ params }: PageProps) {
         const icon = getKategoriIcon(kategori);
         teks += `${icon} *Lapak ${kategori.toUpperCase()}*\n`;
         list.forEach((i) => {
-          const berat =
-            i.kebutuhan_beli_gram >= 1000
-              ? `${(i.kebutuhan_beli_gram / 1000).toFixed(1)} kg`
-              : `${i.kebutuhan_beli_gram}g`;
+          const berat = formatKuantitasBahan(i.nama_bahan, i.kebutuhan_beli_gram);
           teks += `◻ ${i.nama_bahan}: ${berat} (~Rp ${i.estimasi_biaya_rp.toLocaleString('id-ID')})\n`;
         });
         teks += `\n`;
@@ -1074,10 +1113,7 @@ function BelanjaContent({ params }: PageProps) {
                           {items.map((item) => {
                             const inFridge = !!fridgeMap[item.kode_tkpi];
                             const isChecked = !!checkedMap[item.kode_tkpi];
-                            const displayGram =
-                              item.kebutuhan_beli_gram >= 1000
-                                ? `${(item.kebutuhan_beli_gram / 1000).toFixed(1)} kg`
-                                : `${item.kebutuhan_beli_gram} gram`;
+                            const displayGram = formatKuantitasBahan(item.nama_bahan, item.kebutuhan_beli_gram);
 
                             return (
                               <div
@@ -1424,7 +1460,7 @@ function BelanjaContent({ params }: PageProps) {
                   Nama Bahan Pangan:
                 </label>
                 <div className="text-sm font-bold text-[#306a3b]">
-                  {editingItem.nama_bahan} ({editingItem.kebutuhan_beli_gram}g)
+                  {editingItem.nama_bahan} ({formatKuantitasBahan(editingItem.nama_bahan, editingItem.kebutuhan_beli_gram)})
                 </div>
               </div>
 

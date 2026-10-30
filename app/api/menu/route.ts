@@ -189,3 +189,53 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+/**
+ * PATCH /api/menu
+ * Menyimpan status checklist bahan belanja ke dalam meal_plans di database Supabase.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { checklist, meal_plan_id } = body;
+    const family = await getTargetFamily(req);
+
+    if (!family) {
+      return NextResponse.json({ error: 'Data keluarga tidak ditemukan.' }, { status: 404 });
+    }
+
+    const plan = await prisma.mealPlan.findFirst({
+      where: {
+        ...(meal_plan_id ? { id: meal_plan_id } : { family_id: family.id }),
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!plan) {
+      return NextResponse.json({ error: 'Rencana menu tidak ditemukan.' }, { status: 404 });
+    }
+
+    const prevJson = (plan.hasil_json as any) || {};
+    const updatedJson = {
+      ...prevJson,
+      checklist: checklist || prevJson.checklist || {},
+    };
+
+    await prisma.mealPlan.update({
+      where: { id: plan.id },
+      data: { hasil_json: updatedJson },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Status checklist berhasil disinkronkan ke database Supabase.',
+      checklist: updatedJson.checklist,
+    });
+  } catch (err: any) {
+    console.error('Error PATCH /api/menu checklist:', err);
+    return NextResponse.json(
+      { error: err.message || 'Gagal menyimpan checklist ke database.' },
+      { status: 500 }
+    );
+  }
+}

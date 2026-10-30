@@ -1561,8 +1561,10 @@ export default function MenuPage() {
                     {detailResepModal.bahan.map((item, idx) => {
                       const bahanInfo: BahanPangan | undefined = BAHAN_MAP.get(item.kode_tkpi);
                       const namaBahan = bahanInfo?.nama || item.nama_bahan || item.kode_tkpi;
+                      const bddFactor = ((bahanInfo?.bdd_percent || 100) > 0 ? (bahanInfo?.bdd_percent || 100) : 100) / 100;
+                      const hargaPer100g = (bahanInfo?.harga_per_100g_rp && bahanInfo.harga_per_100g_rp > 0) ? bahanInfo.harga_per_100g_rp : 1500;
                       const hargaEst = bahanInfo
-                        ? Math.round((item.jumlah_gram / 100) * bahanInfo.harga_per_100g_rp)
+                        ? Math.round((item.jumlah_gram / bddFactor / 100) * hargaPer100g)
                         : 0;
 
                       return (

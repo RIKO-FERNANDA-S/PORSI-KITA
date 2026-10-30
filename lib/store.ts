@@ -197,20 +197,35 @@ export function saveStoredKulkas(map: Record<string, boolean>) {
   } catch {}
 }
 
-export function getStoredBelanjaChecked(): Record<string, boolean> {
+export { formatKuantitasBahan } from './planner/cost';
+
+export function getStoredBelanjaChecked(menuPlanId?: string): Record<string, boolean> {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_BELANJA_CHECKED);
+    const specificKey = menuPlanId ? `${STORAGE_KEY_BELANJA_CHECKED}_${menuPlanId}` : null;
+    const raw =
+      (specificKey ? localStorage.getItem(specificKey) : null) ||
+      localStorage.getItem(STORAGE_KEY_BELANJA_CHECKED);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 }
 
-export function saveStoredBelanjaChecked(map: Record<string, boolean>) {
+export function saveStoredBelanjaChecked(map: Record<string, boolean>, menuPlanId?: string) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY_BELANJA_CHECKED, JSON.stringify(map));
+    const json = JSON.stringify(map);
+    localStorage.setItem(STORAGE_KEY_BELANJA_CHECKED, json);
+    if (menuPlanId) {
+      localStorage.setItem(`${STORAGE_KEY_BELANJA_CHECKED}_${menuPlanId}`, json);
+    }
+    // Broadcast event agar Beranda dan Daftar Belanja sinkron seketika
+    window.dispatchEvent(
+      new CustomEvent('porsi-checklist-updated', {
+        detail: { map, menuPlanId },
+      })
+    );
   } catch {}
 }
 

@@ -57,6 +57,33 @@ export function buatDaftarBelanjaMingguan(menu7Hari: MenuHari[]): ItemDaftarBela
 }
 
 /**
+ * Memformat kuantitas bahan belanjaan secara cerdas (PRD & Kemudahan Belanja Pasar):
+ * Jika bahan berupa minyak goreng atau cairan, konversikan gram ke ml/liter.
+ * Massa jenis minyak goreng: ~0.9 gr/ml (1000g ~ 1.1L / dibulatkan 1000g = 1 Liter untuk kemudahan belanja pengguna).
+ */
+export function formatKuantitasBahan(namaBahan: string, gram: number): string {
+  const lower = (namaBahan || '').toLowerCase();
+  const isMinyak = lower.includes('minyak');
+  const isCairan = isMinyak || lower.includes('kecap') || lower.includes('susu cair') || lower.includes('santan') || lower.includes('cuka');
+
+  if (isCairan) {
+    // Pendekatan massa jenis minyak ~0.9 gr/ml (atau bulatkan 1000g = 1 Liter)
+    const ml = Math.round(gram / 0.9 / 10) * 10;
+    if (ml >= 1000) {
+      const liter = (ml / 1000).toFixed(1).replace(/\.0$/, '');
+      return `${liter} Liter`;
+    }
+    return `${ml} ml`;
+  }
+
+  if (gram >= 1000) {
+    const kg = (gram / 1000).toFixed(1).replace(/\.0$/, '');
+    return `${kg} kg`;
+  }
+  return `${gram}g`;
+}
+
+/**
  * Format teks WhatsApp siap kirim (PRD FR-11)
  */
 export function formatTeksWhatsAppBelanja(
@@ -79,10 +106,7 @@ export function formatTeksWhatsAppBelanja(
   for (const [kategori, list] of perKategori.entries()) {
     teks += `📍 *${kategori.toUpperCase()}*\n`;
     for (const i of list) {
-      const displayJumlah =
-        i.kebutuhan_beli_gram >= 1000
-          ? `${(i.kebutuhan_beli_gram / 1000).toFixed(1)} kg`
-          : `${i.kebutuhan_beli_gram} gram`;
+      const displayJumlah = formatKuantitasBahan(i.nama_bahan, i.kebutuhan_beli_gram);
       teks += `◻ ${i.nama_bahan}: ${displayJumlah} (~Rp ${i.estimasi_biaya_rp.toLocaleString('id-ID')})\n`;
     }
     teks += `\n`;

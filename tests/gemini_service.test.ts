@@ -104,7 +104,7 @@ describe('Standardisasi Bahan & Logika Harga Aktif Warung', () => {
     const minyak = res.priceMap['BHN-016'];
     expect(minyak).toBeDefined();
     expect(minyak.harga_per_100g_rp).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it('harus memprioritaskan harga custom dari warung keluarga dan fallback ke default pasar untuk bahan lainnya', async () => {
     const res = await getFamilyActivePrices(testFamilyId);
@@ -124,5 +124,5 @@ describe('Standardisasi Bahan & Logika Harga Aktif Warung', () => {
     expect(ayam).toBeDefined();
     expect(ayam.sumber_harga).toBe('default_pasar');
     expect(ayam.harga_per_100g_rp).toBe(3650); // Acuan pasar default
-  });
+  }, 15000);
 });

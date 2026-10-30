@@ -294,11 +294,45 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * PUT: Memperbarui nominal atau catatan transaksi yang sudah ada.
+ * PUT: Memperbarui nominal/catatan transaksi ATAU nama warung yang sudah ada.
  */
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // 1. Dukungan Edit / Update Warung Langganan
+    if (
+      body.action === 'edit_warung' ||
+      body.action === 'update_warung' ||
+      body.warung_id ||
+      (body.nama_warung && !body.nominal)
+    ) {
+      const warungId = body.warung_id || body.id;
+      const newName = (body.nama_warung || body.nama || '').trim();
+      if (!warungId || !newName) {
+        return NextResponse.json(
+          { error: 'ID dan nama warung baru harus disertakan.' },
+          { status: 400 }
+        );
+      }
+
+      const updatedWarung = await prisma.warung.update({
+        where: { id: warungId },
+        data: { nama_warung: newName },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Warung berhasil diperbarui di database!',
+        warung: {
+          id: updatedWarung.id,
+          nama: updatedWarung.nama_warung,
+          tag: 'Warung Langganan',
+        },
+      });
+    }
+
+    // 2. Update Transaksi
     const { id, nominal, catatan } = body;
 
     if (!id) {
@@ -328,29 +362,103 @@ export async function PUT(req: NextRequest) {
       transaction: updated,
     });
   } catch (err: any) {
-    console.error('Error update transaction:', err);
+    console.error('Error update transaction/warung:', err);
     return NextResponse.json(
-      { error: err.message || 'Gagal memperbarui transaksi.' },
+      { error: err.message || 'Gagal memperbarui data.' },
       { status: 500 }
     );
   }
 }
 
 /**
- * DELETE: Menghapus warung langganan dari database.
+ * DELETE: Menghapus transaksi ATAU warung langganan dari database.
  */
 export async function DELETE(req: NextRequest) {
   try {
     const url = req.nextUrl;
-    const urlWarungId = url.searchParams.get('warung_id') || url.searchParams.get('id');
-    const urlNama = url.searchParams.get('nama') || url.searchParams.get('nama_warung');
-
     let body: any = {};
     try {
       body = await req.json();
     } catch {
       // no body provided
     }
+
+    // 1. Dukungan Hapus Transaksi (otomatis mengupdate saldo & pengeluaran)
+    const isTxDelete =
+      body?.action === 'delete_transaction' ||
+      body?.type === 'transaction' ||
+      url.searchParams.get('action') === 'delete_transaction' ||
+      url.searchParams.get('type') === 'transaction' ||
+      body?.transaction_id ||
+      url.searchParams.get('transaction_id');
+
+    if (isTxDelete) {
+      const txId =
+        body?.transaction_id ||
+        body?.id ||
+        url.searchParams.get('transaction_id') ||
+        url.searchParams.get('id');
+
+      if (!txId) {
+        return NextResponse.json(
+          { error: 'ID transaksi harus disertakan untuk menghapus.' },
+          { status: 400 }
+        );
+      }
+
+      const tx = await prisma.transaction.findUnique({
+        where: { id: txId },
+      });
+
+      if (!tx) {
+        return NextResponse.json(
+          { error: 'Transaksi tidak ditemukan di database.' },
+          { status: 404 }
+        );
+      }
+
+      const familyId = tx.family_id;
+
+      await prisma.transaction.delete({
+        where: { id: txId },
+      });
+
+      // Hitung ulang saldo dan pengeluaran keluarga
+      const family = await prisma.family.findUnique({
+        where: { id: familyId },
+      });
+
+      const budgetBelanja = Number(family?.budget_belanja) || 3000000;
+      const tipeBudget = (family?.tipe_budget as 'bulanan' | 'mingguan') || 'bulanan';
+
+      const [expenses, incomes] = await Promise.all([
+        prisma.transaction.aggregate({
+          where: { family_id: familyId, jenis: 'PENGELUARAN' },
+          _sum: { nominal: true },
+        }),
+        prisma.transaction.aggregate({
+          where: { family_id: familyId, jenis: 'PEMASUKAN' },
+          _sum: { nominal: true },
+        }),
+      ]);
+
+      const totalPemasukan = Number(incomes._sum.nominal) || 0;
+      const pengeluaran = Number(expenses._sum.nominal) || 0;
+      const totalAnggaran = (tipeBudget === 'mingguan' ? budgetBelanja * 4 : budgetBelanja) + totalPemasukan;
+      const saldo = Math.max(0, totalAnggaran - pengeluaran);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Transaksi berhasil dihapus dan saldo diperbarui.',
+        total_anggaran: totalAnggaran,
+        pengeluaran,
+        saldo,
+      });
+    }
+
+    // 2. Dukungan Hapus Warung Langganan
+    const urlWarungId = url.searchParams.get('warung_id') || url.searchParams.get('id');
+    const urlNama = url.searchParams.get('nama') || url.searchParams.get('nama_warung');
 
     const targetId = body?.warung_id || body?.id || urlWarungId;
     const targetName = (body?.nama_warung || body?.nama || urlNama || '').trim();
@@ -376,9 +484,9 @@ export async function DELETE(req: NextRequest) {
       message: 'Warung berhasil dihapus dari database.',
     });
   } catch (err: any) {
-    console.error('Error delete warung:', err);
+    console.error('Error delete transaction/warung:', err);
     return NextResponse.json(
-      { error: err.message || 'Gagal menghapus warung dari database.' },
+      { error: err.message || 'Gagal menghapus data dari database.' },
       { status: 500 }
     );
   }
