@@ -7,6 +7,7 @@ const STORAGE_KEY_KELUARGA = 'porsi_kita_keluarga';
 const STORAGE_KEY_ANGGOTA = 'porsi_kita_anggota';
 const STORAGE_KEY_MENU = 'porsi_kita_menu_aktif';
 const STORAGE_KEY_ONBOARDED = 'porsi_kita_onboarded';
+const STORAGE_KEY_PANTANGAN = 'porsi_kita_pantangan_keluarga';
 
 // Profil default Bu Sari untuk demonstrasi langsung (PRD 4.0)
 export const DEFAULT_KELUARGA: Keluarga = {
@@ -139,10 +140,49 @@ export function saveStoredMenu(menu: RencanaMenu7Hari) {
   localStorage.setItem(STORAGE_KEY_MENU, JSON.stringify(menu));
 }
 
+export function getStoredPantangan(): string[] {
+  if (typeof window === 'undefined') return ['Udang / Kepiting (Krustasea)', 'Kacang-kacangan'];
+  const raw = localStorage.getItem(STORAGE_KEY_PANTANGAN);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // fallback
+    }
+  }
+
+  // Jika belum ada di localStorage, ambil dari data anggota atau default
+  const a = getStoredAnggota();
+  const setAl = new Set<string>();
+  a.forEach((m) => {
+    if (m.alergen && m.alergen.length > 0) {
+      m.alergen.forEach((al) => setAl.add(al));
+    }
+  });
+
+  const initial = setAl.size > 0
+    ? Array.from(setAl)
+    : ['Udang / Kepiting (Krustasea)', 'Kacang-kacangan'];
+
+  try {
+    localStorage.setItem(STORAGE_KEY_PANTANGAN, JSON.stringify(initial));
+  } catch {}
+  return initial;
+}
+
+export function saveStoredPantangan(list: string[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_PANTANGAN, JSON.stringify(list));
+  } catch {}
+}
+
 export function resetDemoState() {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(STORAGE_KEY_KELUARGA);
   localStorage.removeItem(STORAGE_KEY_ANGGOTA);
   localStorage.removeItem(STORAGE_KEY_MENU);
   localStorage.removeItem(STORAGE_KEY_ONBOARDED);
+  localStorage.removeItem(STORAGE_KEY_PANTANGAN);
 }

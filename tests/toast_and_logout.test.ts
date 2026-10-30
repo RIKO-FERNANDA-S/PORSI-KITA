@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toast } from '../components/ToastProvider';
+import { getStoredPantangan, saveStoredPantangan } from '../lib/store';
 
 describe('Sistem Alert Animasi & Pop-Up Konfirmasi Logout', () => {
   let dispatchedEvents: CustomEvent[] = [];
@@ -129,5 +130,40 @@ describe('Sistem Alert Animasi & Pop-Up Konfirmasi Logout', () => {
     expect(dispatchedEvents.length).toBe(1);
     expect(dispatchedEvents[0].detail.title).toBe('Warung Dihapus');
     expect(dispatchedEvents[0].detail.message).toContain('Warung Sayur Bu Ani');
+  });
+
+  it('8. Persistensi Pantangan Makanan: bahan baru tersimpan dan TIDAK hilang saat browser disegarkan', () => {
+    const mockStorage: Record<string, string> = {};
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, val: string) => {
+        mockStorage[key] = val;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    });
+
+    // 1. Ambil list awal (default)
+    const initialList = getStoredPantangan();
+    expect(initialList).toContain('Udang / Kepiting (Krustasea)');
+    expect(initialList).toContain('Kacang-kacangan');
+
+    // 2. Tambah bahan pantangan baru: "Telur Ayam"
+    const nextList = [...initialList, 'Telur Ayam'];
+    saveStoredPantangan(nextList);
+
+    // 3. Simulasi refresh browser: panggil getStoredPantangan lagi
+    const reloadedList = getStoredPantangan();
+    expect(reloadedList).toContain('Telur Ayam');
+    expect(reloadedList.length).toBe(initialList.length + 1);
+
+    // 4. Hapus bahan pantangan dan pastikan hasil penghapusan juga persisten
+    const afterDelete = reloadedList.filter((item: string) => item !== 'Kacang-kacangan');
+    saveStoredPantangan(afterDelete);
+
+    const reloadedAfterDelete = getStoredPantangan();
+    expect(reloadedAfterDelete).not.toContain('Kacang-kacangan');
+    expect(reloadedAfterDelete).toContain('Telur Ayam');
   });
 });

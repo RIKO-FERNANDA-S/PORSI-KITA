@@ -11,6 +11,8 @@ import {
   saveStoredKeluarga,
   getStoredAnggota,
   saveStoredAnggota,
+  getStoredPantangan,
+  saveStoredPantangan,
   resetDemoState,
 } from '../../lib/store';
 import { hitungKebutuhan } from '../../lib/nutrition/akg';
@@ -48,12 +50,13 @@ export default function PengaturanKeluargaPage() {
     posyanduSync: false,
   });
 
-  // Modal State untuk Ubah Nomor HP / Ganti Password / Budget
-  const [modalMode, setModalMode] = useState<'none' | 'phone' | 'password' | 'budget'>('none');
+  // Modal State untuk Ubah Nomor HP / Ganti Password / Budget / Tambah Pantangan
+  const [modalMode, setModalMode] = useState<'none' | 'phone' | 'password' | 'budget' | 'pantangan'>('none');
   const [phoneInput, setPhoneInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [budgetInput, setBudgetInput] = useState('');
   const [keluargaTipeBudget, setKeluargaTipeBudget] = useState<'bulanan' | 'mingguan'>('bulanan');
+  const [pantanganInput, setPantanganInput] = useState('');
 
   useEffect(() => {
     try {
@@ -80,18 +83,17 @@ export default function PengaturanKeluargaPage() {
         }
       } catch {}
 
-      // Kumpulkan alergi unik dari seluruh anggota jika ada
-      const allAlergen = new Set<string>();
+      // Muat daftar pantangan keluarga yang persisten dari storage
+      const storedPantangan = getStoredPantangan();
+      const combinedAllergen = new Set<string>(storedPantangan);
       a.forEach((m) => {
         if (m.alergen && m.alergen.length > 0) {
-          m.alergen.forEach((al) => allAlergen.add(getAlergenLabel(al)));
+          m.alergen.forEach((al) => combinedAllergen.add(getAlergenLabel(al)));
         }
       });
-      if (allAlergen.size > 0) {
-        setAllergyList(Array.from(allAlergen));
-      } else {
-        setAllergyList(['Udang / Kepiting (Krustasea)', 'Kacang-kacangan']);
-      }
+      const finalList = Array.from(combinedAllergen);
+      setAllergyList(finalList);
+      saveStoredPantangan(finalList);
     } catch (e) {
       console.error('Gagal memuat pengaturan keluarga:', e);
     }
@@ -210,23 +212,41 @@ export default function PengaturanKeluargaPage() {
     showToast(`Anggaran belanja tersimpan: Rp ${val.toLocaleString('id-ID')} (${keluargaTipeBudget})`);
   };
 
-  // 5. Tambah & Hapus Pantangan Alergi
-  const handleAddAllergy = () => {
-    const nama = prompt('Masukkan nama pantangan / bahan alergi yang dilarang:\n(Contoh: Telur, Ikan Tongkol, Terigu/Gluten)');
-    if (nama && nama.trim()) {
-      const trimmed = nama.trim();
-      if (!allergyList.includes(trimmed)) {
-        setAllergyList((prev) => [...prev, trimmed]);
-        showToast(`Pantangan "${trimmed}" berhasil ditambahkan.`);
-      }
+  // 5. Tambah & Hapus Pantangan Alergi (Tersimpan Permanen)
+  const handleOpenAddAllergy = () => {
+    setPantanganInput('');
+    setModalMode('pantangan');
+  };
+
+  const handleSavePantanganSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = pantanganInput.trim();
+    if (!trimmed) {
+      showWarning('Silakan ketik nama bahan makanan yang dipantang.', 'Bahan Masih Kosong');
+      return;
     }
+
+    if (allergyList.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+      showWarning(`Pantangan "${trimmed}" sudah terdaftar dalam daftar keluarga.`, 'Sudah Ada');
+      return;
+    }
+
+    const nextList = [...allergyList, trimmed];
+    setAllergyList(nextList);
+    saveStoredPantangan(nextList);
+    setModalMode('none');
+    setPantanganInput('');
+    showSuccess(
+      `Pantangan "${trimmed}" berhasil disimpan permanen untuk seluruh masakan keluarga!`,
+      'Pantangan Disimpan'
+    );
   };
 
   const handleRemoveAllergy = (nama: string) => {
-    if (confirm(`Hapus pantangan "${nama}" dari daftar pantangan keluarga?`)) {
-      setAllergyList((prev) => prev.filter((item) => item !== nama));
-      showToast(`Pantangan "${nama}" dihapus.`);
-    }
+    const nextList = allergyList.filter((item) => item !== nama);
+    setAllergyList(nextList);
+    saveStoredPantangan(nextList);
+    showSuccess(`Pantangan "${nama}" telah dihapus dari daftar keluarga.`, 'Pantangan Dihapus');
   };
 
   // 6. Hapus Anggota
@@ -475,8 +495,8 @@ export default function PengaturanKeluargaPage() {
 
               <button
                 type="button"
-                onClick={handleAddAllergy}
-                className="min-h-[46px] px-5 py-2 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-[#ba1a1a] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer self-start sm:self-auto border border-[#ba1a1a]/20"
+                onClick={handleOpenAddAllergy}
+                className="min-h-[46px] px-5 py-2 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-[#ba1a1a] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer self-start sm:self-auto border border-[#ba1a1a]/20 shadow-2xs hover:shadow-xs active:scale-[0.99]"
               >
                 <span>+ Tambah Pantangan Bahan</span>
               </button>
@@ -834,6 +854,8 @@ export default function PengaturanKeluargaPage() {
                   ? 'Ubah Nomor HP Akun'
                   : modalMode === 'password'
                   ? 'Ganti Kata Sandi Akun'
+                  : modalMode === 'pantangan'
+                  ? 'Tambah Pantangan Makanan Keluarga'
                   : 'Atur Anggaran Belanja Dapur'}
               </h3>
               <button
@@ -992,6 +1014,72 @@ export default function PengaturanKeluargaPage() {
                     className="min-h-[46px] px-6 py-2 rounded-full bg-[#6da003] hover:bg-[#466800] text-white text-xs sm:text-sm font-bold transition cursor-pointer shadow-sm"
                   >
                     Simpan Anggaran
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Modal Tambah Pantangan Bahan Makanan (Persisten ke Storage) */}
+            {modalMode === 'pantangan' && (
+              <form onSubmit={handleSavePantanganSubmit} className="flex flex-col gap-3.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs sm:text-sm font-bold text-[#737a65]">
+                    Nama Pantangan / Bahan Alergi yang Dilarang:
+                  </label>
+                  <p className="text-[12px] text-[#8e9185]">
+                    Bahan ini akan disimpan permanen dan dilarang dalam seluruh rencana menu masakan keluarga.
+                  </p>
+                </div>
+
+                <input
+                  type="text"
+                  autoFocus
+                  required
+                  value={pantanganInput}
+                  onChange={(e) => setPantanganInput(e.target.value)}
+                  placeholder="Contoh: Telur Ayam, Ikan Tongkol, Susu Sapi..."
+                  className="w-full min-h-[48px] px-4 py-2.5 rounded-2xl bg-[#fff8f7] border border-stone-300 text-sm sm:text-base font-bold text-[#2c1514] focus:outline-none focus:ring-2 focus:ring-[#ba1a1a]"
+                />
+
+                {/* Rekomendasi Alergen Umum Kemenkes / WHO */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-semibold text-[#737a65]">Pilihan Cepat Pantangan Umum:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'Udang & Kepiting',
+                      'Kacang-kacangan',
+                      'Telur Ayam',
+                      'Ikan Laut',
+                      'Susu Sapi (Laktosa)',
+                      'Terigu (Gluten)',
+                      'Cumi-cumi',
+                      'Kedelai',
+                    ].map((saran) => (
+                      <button
+                        key={saran}
+                        type="button"
+                        onClick={() => setPantanganInput(saran)}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-[#ba1a1a] border border-[#ba1a1a]/20 transition cursor-pointer"
+                      >
+                        + {saran}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalMode('none')}
+                    className="min-h-[46px] px-5 py-2 rounded-full bg-stone-100 text-[#2c1514] text-xs sm:text-sm font-bold hover:bg-stone-200 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="min-h-[46px] px-6 py-2 rounded-full bg-[#ba1a1a] hover:bg-[#93000a] text-white text-xs sm:text-sm font-bold transition cursor-pointer shadow-sm flex items-center gap-1.5"
+                  >
+                    <span>Simpan Pantangan</span>
                   </button>
                 </div>
               </form>
