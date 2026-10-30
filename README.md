@@ -37,7 +37,7 @@
 5. [Panduan Instalasi & Menjalankan Lokal](#-5-panduan-instalasi--menjalankan-lokal)
 6. [Keamanan, Privasi, & Validasi Sistem](#-6-keamanan-privasi--validasi-sistem)
 7. [Hasil Pengujian & Verifikasi Kualitas](#-7-hasil-pengujian--verifikasi-kualitas)
-8. [Profil Tim Pengembang (Yowana Tech)](#-8-profil-tim-pengembang-yowana-tech)
+8. [Profil Tim Pengembang ("nah ini, apa ya?")](#-8-profil-tim-pengembang-nah-ini-apa-ya)
 
 ---
 
@@ -265,9 +265,9 @@ Status      100% Passing
 
 ---
 
-## 👥 8. Profil Tim Pengembang (Yowana Tech)
+## 👥 8. Profil Tim Pengembang ("nah ini, apa ya?")
 
-Dokumentasi dan proyek aplikasi ini dikembangkan secara kolaboratif oleh tim **Yowana Tech** untuk **UIN Alauddin Informatics Contest (UINIC 8.0)**:
+Dokumentasi dan proyek aplikasi ini dikembangkan secara kolaboratif oleh tim **"nah ini, apa ya?"** untuk **UIN Alauddin Informatics Contest (UINIC 8.0)**:
 
 <div align="center">
 
@@ -282,10 +282,10 @@ Dokumentasi dan proyek aplikasi ini dikembangkan secara kolaboratif oleh tim **Y
 <br/>
 
 > *"Teknologi terbaik bukan teknologi yang paling rumit, melainkan teknologi yang mampu hadir di dapur rumah tangga sederhana dan memastikan anak-anak Indonesia tumbuh sehat, cerdas, dan bebas stunting."*  
-> **— Tim Yowana Tech**
+> **— Tim "nah ini, apa ya?"**
 
 ---
 
 <div align="center">
-  <small>© 2026 Porsi Kita by Yowana Tech. Dikembangkan dengan dedikasi untuk masa depan generasi emas Indonesia.</small>
+  <small>© 2026 Porsi Kita by "nah ini, apa ya?". Dikembangkan dengan dedikasi untuk masa depan generasi emas Indonesia.</small>
 </div>
