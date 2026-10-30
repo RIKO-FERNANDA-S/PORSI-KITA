@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
+import { toast } from '../../components/ToastProvider';
 
 interface TransaksiItem {
   id: string;
@@ -352,7 +353,7 @@ export default function DompetBulananPage() {
         const data = await res.json();
         if (data.success && data.warung) {
           setWarungs((prev) => [data.warung, ...prev]);
-          alert(`Warung "${trimmed}" berhasil ditambahkan.`);
+          toast.success(`Warung "${trimmed}" berhasil ditambahkan ke daftar warung keluarga!`, 'Warung Ditambahkan');
           return;
         }
       } catch (err) {
@@ -367,7 +368,7 @@ export default function DompetBulananPage() {
         totalSpent: 0,
       };
       setWarungs((prev) => [newWarung, ...prev]);
-      alert(`Warung "${trimmed}" berhasil ditambahkan.`);
+      toast.success(`Warung "${trimmed}" berhasil ditambahkan ke daftar warung keluarga!`, 'Warung Ditambahkan');
     }
   };
 

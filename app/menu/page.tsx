@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Sidebar from '../../components/Sidebar';
+import { toast } from '../../components/ToastProvider';
 import {
   RencanaMenu7Hari,
   MenuHari,
@@ -325,9 +326,13 @@ export default function MenuPage() {
         .then((resData) => {
           if (resData.success) {
             setDbSyncStatus('Tersimpan di Database');
+            toast.success('Rencana menu 7 hari baru berhasil dibuat dan disimpan ke database!', 'Menu 7 Hari Siap');
           }
         })
-        .catch((err) => console.warn('Gagal update menu ke database:', err));
+        .catch((err) => {
+          console.warn('Gagal update menu ke database:', err);
+          toast.error('Gagal menyinkronkan menu baru ke server.', 'Kendala Sinkronisasi');
+        });
 
       setIsRegenerating(false);
       setRegenerateNotice('Menu Berhasil Diperbarui & Disimpan!');
@@ -527,9 +532,13 @@ export default function MenuPage() {
       .then((resData) => {
         if (resData.success) {
           setDbSyncStatus('Tersimpan di Database');
+          toast.success(`Hidangan berhasil ditukar dengan "${resepBaru.nama}"!`, 'Menu Diperbarui');
         }
       })
-      .catch((err) => console.warn('Gagal update swap ke database:', err));
+      .catch((err) => {
+        console.warn('Gagal update swap ke database:', err);
+        toast.error('Gagal menyinkronkan perubahan resep ke server.', 'Kendala Sinkronisasi');
+      });
   };
 
   if (loading || !rencanaMenu) {

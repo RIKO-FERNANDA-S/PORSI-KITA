@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getStoredAnggota, getStoredMenu } from '../lib/store';
+import { useToast } from './ToastProvider';
 
 export type SidebarPath = 'beranda' | 'kalender-menu' | 'dompet' | 'daftar-belanja' | 'pengaturan';
 
@@ -23,6 +24,7 @@ export default function Sidebar({
   rencanaMenuId: propRencanaMenuId,
 }: SidebarProps) {
   const router = useRouter();
+  const { openLogoutModal, showSuccess, showError } = useToast();
   const [internalAnggotaCount, setInternalAnggotaCount] = useState<number>(propAnggotaCount || 4);
   const [menuId, setMenuId] = useState<string>(propRencanaMenuId || '');
 
@@ -88,39 +90,22 @@ export default function Sidebar({
     if (setMobileOpen) setMobileOpen(false);
   };
 
-  const handleLogout = async () => {
-    const konfirmasi = confirm('Apakah Anda yakin ingin keluar dari akun?');
-    if (!konfirmasi) return;
-
-    // Tandai bahwa user telah melakukan logout saat belum mengatur kata sandi
-    try {
-      const rawMeta = localStorage.getItem('porsi_kita_auth_meta');
-      if (rawMeta) {
-        const meta = JSON.parse(rawMeta);
-        meta.hasLoggedOutAfterOtp = true;
-        localStorage.setItem('porsi_kita_auth_meta', JSON.stringify(meta));
-      }
-    } catch {
-      // fallback
-    }
-
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {
-      // fallback
-    }
-
-    router.push('/masuk');
+  const handleLogout = () => {
+    openLogoutModal();
   };
 
   const handleSetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPasswordInput.length < 6) {
-      setModalFeedback({ type: 'error', msg: 'Kata sandi minimal 6 karakter.' });
+      const msg = 'Kata sandi minimal 6 karakter demi keamanan akun keluarga.';
+      setModalFeedback({ type: 'error', msg });
+      showError(msg, 'Kata Sandi Terlalu Pendek');
       return;
     }
     if (newPasswordInput !== repeatPasswordInput) {
-      setModalFeedback({ type: 'error', msg: 'Ulangi kata sandi baru tidak cocok.' });
+      const msg = 'Ulangi kata sandi baru tidak cocok. Periksa kembali.';
+      setModalFeedback({ type: 'error', msg });
+      showError(msg, 'Konfirmasi Sandi Berbeda');
       return;
     }
 
@@ -145,12 +130,15 @@ export default function Sidebar({
       const data = await res.json();
 
       if (!res.ok) {
-        setModalFeedback({ type: 'error', msg: data.error || 'Gagal menyimpan sandi.' });
+        const errText = data.error || 'Gagal menyimpan kata sandi.';
+        setModalFeedback({ type: 'error', msg: errText });
+        showError(errText, 'Gagal Menyimpan Sandi');
         setPasswordLoading(false);
         return;
       }
 
       setModalFeedback({ type: 'success', msg: 'Kata sandi berhasil disimpan!' });
+      showSuccess('Kata sandi baru berhasil disimpan dan akun keluarga telah terlindungi!', 'Berhasil Disimpan');
 
       // Update auth_meta
       if (typeof window !== 'undefined') {
@@ -166,7 +154,9 @@ export default function Sidebar({
         setModalFeedback({ type: '', msg: '' });
       }, 1200);
     } catch {
-      setModalFeedback({ type: 'error', msg: 'Gagal terhubung ke server.' });
+      const netErr = 'Gagal terhubung ke server saat menyimpan sandi.';
+      setModalFeedback({ type: 'error', msg: netErr });
+      showError(netErr, 'Kendala Jaringan');
     } finally {
       setPasswordLoading(false);
     }

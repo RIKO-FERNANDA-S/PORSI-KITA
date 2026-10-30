@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
+import { useToast } from '../../components/ToastProvider';
 import { Anggota, Keluarga } from '../../lib/types';
 import {
   getStoredKeluarga,
@@ -24,12 +25,12 @@ function getAlergenLabel(alIdOrName: string): string {
 
 export default function PengaturanKeluargaPage() {
   const router = useRouter();
+  const { showSuccess, showError, showInfo, showWarning } = useToast();
 
   // State Utama
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [keluarga, setKeluarga] = useState<Keluarga | null>(null);
   const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
-  const [toastMsg, setToastMsg] = useState('');
 
   // Akun & Keamanan
   const [phone, setPhone] = useState('+62 812-3456-7890');
@@ -97,8 +98,7 @@ export default function PengaturanKeluargaPage() {
   }, []);
 
   const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3500);
+    showSuccess(msg);
   };
 
   // 1. Simpan Nomor Telepon
@@ -113,14 +113,14 @@ export default function PengaturanKeluargaPage() {
       localStorage.setItem('porsi_kita_auth_meta', JSON.stringify(meta));
     } catch {}
     setModalMode('none');
-    showToast('Nomor HP akun berhasil diperbarui!');
+    showSuccess('Nomor HP akun berhasil diperbarui!');
   };
 
   // 2. Simpan Password Baru ke Database
   const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordInput.length < 6) {
-      alert('Kata sandi minimal 6 karakter demi keamanan akun keluarga.');
+      showError('Kata sandi minimal 6 karakter demi keamanan akun keluarga.', 'Kata Sandi Terlalu Pendek');
       return;
     }
 
@@ -141,7 +141,7 @@ export default function PengaturanKeluargaPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || 'Gagal menyimpan kata sandi ke database.');
+        showError(data.error || 'Gagal menyimpan kata sandi ke database.', 'Gagal Menyimpan Sandi');
         return;
       }
 
@@ -154,9 +154,9 @@ export default function PengaturanKeluargaPage() {
         localStorage.setItem('porsi_kita_auth_meta', JSON.stringify(meta));
       }
 
-      showToast('Kata sandi berhasil diperbarui dan tersimpan aman!');
+      showSuccess('Kata sandi berhasil diperbarui dan tersimpan aman di database!', 'Berhasil Disimpan');
     } catch {
-      alert('Terjadi kendala koneksi saat menyimpan kata sandi.');
+      showError('Terjadi kendala koneksi saat menyimpan kata sandi.', 'Kendala Jaringan');
     }
   };
 
@@ -168,7 +168,7 @@ export default function PengaturanKeluargaPage() {
       const updated = { ...keluarga, wilayah: val };
       setKeluarga(updated);
       saveStoredKeluarga(updated);
-      showToast(`Acuan pasar diubah ke "${val}"`);
+      showSuccess(`Acuan pasar diubah ke "${val}"`);
     }
   };
 
@@ -178,7 +178,7 @@ export default function PengaturanKeluargaPage() {
     if (!keluarga) return;
     const val = parseInt(budgetInput.replace(/\D/g, ''), 10);
     if (isNaN(val) || val <= 0) {
-      alert('Nominal anggaran belanja harus lebih dari Rp 0.');
+      showWarning('Nominal anggaran belanja harus lebih dari Rp 0.', 'Anggaran Belum Tepat');
       return;
     }
     const totalBulanan = keluargaTipeBudget === 'mingguan' ? val * 4 : val;
@@ -280,8 +280,10 @@ export default function PengaturanKeluargaPage() {
     );
     if (konfirmasi) {
       resetDemoState();
-      alert('Data telah direset. Halaman akan dimuat ulang.');
-      window.location.reload();
+      showSuccess('Data telah direset ke pengaturan awal pabrik. Memuat ulang...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     }
   };
 
@@ -368,25 +370,6 @@ export default function PengaturanKeluargaPage() {
       {/* 3. MAIN CONTENT CONTAINER */}
       <main className="lg:pl-64 pt-4 lg:pt-20 pb-20 px-4 sm:px-6 lg:px-8 max-w-[1240px] mx-auto">
         <div className="flex flex-col gap-6">
-
-          {/* Toast Notification Alert */}
-          {toastMsg && (
-            <div className="p-4 rounded-2xl bg-[#306a3b] text-white text-sm font-bold shadow-md transition flex items-center justify-between animate-fadeIn">
-              <div className="flex items-center gap-2.5">
-                <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[#b2f2b6]">
-                  ✓
-                </span>
-                <span>{toastMsg}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setToastMsg('')}
-                className="text-white/80 hover:text-white px-2 py-1 cursor-pointer font-bold"
-              >
-                ✕
-              </button>
-            </div>
-          )}
 
           {/* HERO SUMMARY CARD: INFORMASI UTAMA KELUARGA (SANGAT MUDAH DIBACA ORANG TUA) */}
           <section className="bg-[#306a3b] text-white rounded-3xl p-6 sm:p-8 shadow-md relative overflow-hidden">

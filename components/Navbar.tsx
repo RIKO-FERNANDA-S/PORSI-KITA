@@ -2,12 +2,25 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import BrandLogo from './BrandLogo';
+import { useToast } from './ToastProvider';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { openLogoutModal } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    try {
+      const meta = localStorage.getItem('porsi_kita_auth_meta');
+      const keluarga = localStorage.getItem('porsi_kita_keluarga');
+      setIsLoggedIn(Boolean(meta || keluarga));
+    } catch {
+      // fallback
+    }
+  }, [pathname]);
 
   // Jangan render navbar desktop pada halaman Login dan Beranda Figma murni
   if (pathname === '/' || pathname === '/masuk' || pathname === '/daftar') {
@@ -69,12 +82,22 @@ export default function Navbar() {
           >
             Buka Dapur
           </Link>
-          <Link
-            href="/masuk"
-            className="inline-flex items-center justify-center px-3 py-2 text-xs font-[600] text-[#0D0101] hover:bg-stone-100 rounded-xl transition min-h-[40px]"
-          >
-            Keluar / Masuk
-          </Link>
+          {isLoggedIn ? (
+            <button
+              type="button"
+              onClick={openLogoutModal}
+              className="inline-flex items-center justify-center px-3 py-2 text-xs font-[600] text-rose-700 hover:text-rose-900 hover:bg-rose-50 rounded-xl transition min-h-[40px] cursor-pointer"
+            >
+              Keluar
+            </button>
+          ) : (
+            <Link
+              href="/masuk"
+              className="inline-flex items-center justify-center px-3 py-2 text-xs font-[600] text-[#0D0101] hover:bg-stone-100 rounded-xl transition min-h-[40px]"
+            >
+              Masuk
+            </Link>
+          )}
         </div>
 
         {/* Mobile Hamburger Button */}
@@ -125,6 +148,26 @@ export default function Navbar() {
             >
               Buka Dapur Menu
             </Link>
+            {isLoggedIn ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  openLogoutModal();
+                }}
+                className="w-full py-3 text-center text-sm font-[700] text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-[10px] min-h-[44px] flex items-center justify-center transition cursor-pointer"
+              >
+                Keluar Akun
+              </button>
+            ) : (
+              <Link
+                href="/masuk"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full py-3 text-center text-sm font-[600] text-[#0D0101] hover:bg-stone-50 rounded-[10px] min-h-[44px] flex items-center justify-center border border-stone-200 transition"
+              >
+                Masuk ke Akun
+              </Link>
+            )}
           </div>
         </div>
       )}

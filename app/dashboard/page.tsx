@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
+import { toast } from '../../components/ToastProvider';
 import { getStoredKeluarga, getStoredAnggota, getStoredMenu } from '../../lib/store';
 import { buatDaftarBelanjaMingguan } from '../../lib/planner/cost';
 import { RencanaMenu7Hari, MenuHari } from '../../lib/types';
@@ -582,7 +583,7 @@ export default function DashboardPage() {
             {/* Notifikasi Ringkasan */}
             <button
               type="button"
-              onClick={() => alert(`Notifikasi: Menu untuk ${userProfileName} telah siap dan anggaran belanja terkunci aman.`)}
+              onClick={() => toast.info(`Menu harian untuk ${userProfileName} telah siap dan anggaran belanja terkunci aman.`, 'Notifikasi Dapur')}
               className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 hover:text-stone-900 transition relative cursor-pointer"
               title="Notifikasi Menu & Anggaran"
             >

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, use, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../../components/Sidebar';
+import { toast } from '../../../components/ToastProvider';
 import { ItemDaftarBelanja, RencanaMenu7Hari, Keluarga, Anggota } from '../../../lib/types';
 import { getStoredMenu, getStoredKeluarga, getStoredAnggota, saveStoredMenu } from '../../../lib/store';
 import { buatDaftarBelanjaMingguan } from '../../../lib/planner/cost';
@@ -187,8 +188,7 @@ function BelanjaContent({ params }: PageProps) {
   }, [periodeFilter, rencanaMenu]);
 
   const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
+    toast.success(msg);
   };
 
   // Resep masakan yang termasuk dalam periode filter saat ini
@@ -512,7 +512,7 @@ function BelanjaContent({ params }: PageProps) {
   // Konfirmasi selesai belanja & simpan pengeluaran nyata ke database PostgreSQL
   const handleConfirmFinish = async () => {
     if (totalSudahDibeli <= 0) {
-      alert('Silakan centang minimal satu bahan belanjaan yang telah dibeli.');
+      toast.warning('Silakan centang minimal satu bahan belanjaan yang telah dibeli.', 'Belanjaan Belum Dicentang');
       return;
     }
 
@@ -808,7 +808,7 @@ function BelanjaContent({ params }: PageProps) {
                     type="button"
                     onClick={() => {
                       if (totalSudahDibeli <= 0) {
-                        alert('Silakan centang minimal satu bahan belanjaan yang telah dibeli.');
+                        toast.warning('Silakan centang minimal satu bahan belanjaan yang telah dibeli.', 'Belanjaan Belum Dicentang');
                         return;
                       }
                       setShowFinishModal(true);

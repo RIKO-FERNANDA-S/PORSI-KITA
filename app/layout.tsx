@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import './globals.css';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import ToastProvider from '../components/ToastProvider';
 
 export const metadata: Metadata = {
   title: 'Porsi Kita — Satu Menu Keluarga, Gizi Tepat untuk Setiap Anggota',
@@ -18,7 +19,9 @@ export default function RootLayout({
   return (
     <html lang="id" className="h-full">
       <body className="min-h-full flex flex-col bg-[#FAFAFA] text-[#0D0101] antialiased">
-        <main className="flex-1">{children}</main>
+        <ToastProvider>
+          <main className="flex-1">{children}</main>
+        </ToastProvider>
       </body>
     </html>
   );
