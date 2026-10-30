@@ -47,10 +47,20 @@ export default function DompetBulananPage() {
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
+  const [isExitingModal, setIsExitingModal] = useState(false);
   const [modalType, setModalType] = useState<'expense' | 'income'>('expense');
   const [modalAmount, setModalAmount] = useState('');
   const [modalMerchant, setModalMerchant] = useState('Warung Sayur');
   const [modalDesc, setModalDesc] = useState('');
+
+  // Warung Modal State with entrance & exit animations
+  const [warungModalOpen, setWarungModalOpen] = useState(false);
+  const [isExitingWarungModal, setIsExitingWarungModal] = useState(false);
+  const [warungNameInput, setWarungNameInput] = useState('');
+  const [warungTagInput, setWarungTagInput] = useState('Warung Langganan');
+  const [warungNotesInput, setWarungNotesInput] = useState('');
+  const [isSavingWarung, setIsSavingWarung] = useState(false);
+  const [warungErrorMsg, setWarungErrorMsg] = useState('');
 
   // Sinkronisasi data keuangan real-time dari Database PostgreSQL
   const loadRealtimeFinance = async () => {
@@ -179,6 +189,7 @@ export default function DompetBulananPage() {
     setModalType(type);
     setModalAmount('');
     setModalDesc('');
+    setIsExitingModal(false);
     if (type === 'income') {
       setModalMerchant('Transfer Bank Mandiri');
     } else {
@@ -187,10 +198,141 @@ export default function DompetBulananPage() {
     setModalOpen(true);
   };
 
-  // Close modal
+  // Close modal with exit animation
   const handleCloseModal = () => {
-    setModalOpen(false);
+    setIsExitingModal(true);
+    setTimeout(() => {
+      setModalOpen(false);
+      setIsExitingModal(false);
+    }, 200);
   };
+
+  // Warung Modal Handlers with entrance & exit animations
+  const handleOpenWarungModal = () => {
+    setWarungNameInput('');
+    setWarungTagInput('Warung Langganan');
+    setWarungNotesInput('');
+    setWarungErrorMsg('');
+    setIsExitingWarungModal(false);
+    setWarungModalOpen(true);
+  };
+
+  const handleCloseWarungModal = () => {
+    if (isSavingWarung) return;
+    setIsExitingWarungModal(true);
+    setTimeout(() => {
+      setWarungModalOpen(false);
+      setIsExitingWarungModal(false);
+    }, 200);
+  };
+
+  const handleSaveWarungSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = warungNameInput.trim();
+    if (!trimmed) {
+      setWarungErrorMsg('Silakan masukkan nama warung atau pedagang langganan.');
+      return;
+    }
+
+    // Cek apakah warung dengan nama serupa sudah ada
+    const exists = warungs.some(
+      (w) => w.nama.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      setWarungErrorMsg(`Warung "${trimmed}" sudah terdaftar di daftar warung keluarga.`);
+      return;
+    }
+
+    setIsSavingWarung(true);
+    setWarungErrorMsg('');
+
+    try {
+      let meta: any = null;
+      try {
+        const raw = localStorage.getItem('porsi_kita_auth_meta');
+        if (raw) meta = JSON.parse(raw);
+      } catch {}
+
+      const res = await fetch('/api/family/transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_warung',
+          phone: meta?.phone,
+          nama_warung: trimmed,
+        }),
+      });
+      const data = await res.json();
+
+      let createdWarung: WarungLangganan;
+      if (res.ok && data.success && data.warung) {
+        createdWarung = {
+          ...data.warung,
+          tag: warungTagInput || data.warung.tag || 'Warung Langganan',
+        };
+      } else {
+        createdWarung = {
+          id: `w-${Date.now()}`,
+          nama: trimmed,
+          tag: warungTagInput || 'Warung Langganan',
+          count: 0,
+          totalSpent: 0,
+        };
+      }
+
+      setWarungs((prev) => [createdWarung, ...prev]);
+
+      // Tutup modal warung dengan animasi keluar
+      setIsExitingWarungModal(true);
+      setTimeout(() => {
+        setWarungModalOpen(false);
+        setIsExitingWarungModal(false);
+        setIsSavingWarung(false);
+      }, 200);
+
+      toast.success(
+        `Warung "${trimmed}" berhasil ditambahkan ke daftar warung langganan keluarga!`,
+        'Warung Ditambahkan'
+      );
+    } catch (err) {
+      console.warn('Gagal menyimpan warung ke database:', err);
+      const fallbackWarung: WarungLangganan = {
+        id: `w-${Date.now()}`,
+        nama: trimmed,
+        tag: warungTagInput || 'Warung Langganan',
+        count: 0,
+        totalSpent: 0,
+      };
+      setWarungs((prev) => [fallbackWarung, ...prev]);
+
+      setIsExitingWarungModal(true);
+      setTimeout(() => {
+        setWarungModalOpen(false);
+        setIsExitingWarungModal(false);
+        setIsSavingWarung(false);
+      }, 200);
+
+      toast.success(
+        `Warung "${trimmed}" berhasil ditambahkan ke daftar warung keluarga!`,
+        'Warung Ditambahkan'
+      );
+    }
+  };
+
+  // Keyboard shortcut listener for closing modals (Esc)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (warungModalOpen && !isSavingWarung) {
+          handleCloseWarungModal();
+        } else if (modalOpen) {
+          handleCloseModal();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [warungModalOpen, isSavingWarung, modalOpen]);
 
   // Handle amount change with Indonesian thousand separator
   const handleAmountInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,49 +468,6 @@ export default function DompetBulananPage() {
           console.warn('Gagal update transaksi:', err);
         }
       }
-    }
-  };
-
-  // Handle Add New Warung
-  const handleAddMerchant = async () => {
-    const name = prompt('Masukkan nama warung atau pedagang langganan baru:\n(Contoh: Warung Sayur Bu Ani)');
-    if (name && name.trim()) {
-      const trimmed = name.trim();
-      try {
-        let meta: any = null;
-        try {
-          const raw = localStorage.getItem('porsi_kita_auth_meta');
-          if (raw) meta = JSON.parse(raw);
-        } catch {}
-
-        const res = await fetch('/api/family/transaction', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'add_warung',
-            phone: meta?.phone,
-            nama_warung: trimmed,
-          }),
-        });
-        const data = await res.json();
-        if (data.success && data.warung) {
-          setWarungs((prev) => [data.warung, ...prev]);
-          toast.success(`Warung "${trimmed}" berhasil ditambahkan ke daftar warung keluarga!`, 'Warung Ditambahkan');
-          return;
-        }
-      } catch (err) {
-        console.warn('Gagal menyimpan warung ke database:', err);
-      }
-
-      const newWarung: WarungLangganan = {
-        id: `w-${Date.now()}`,
-        nama: trimmed,
-        tag: 'Warung Langganan',
-        count: 0,
-        totalSpent: 0,
-      };
-      setWarungs((prev) => [newWarung, ...prev]);
-      toast.success(`Warung "${trimmed}" berhasil ditambahkan ke daftar warung keluarga!`, 'Warung Ditambahkan');
     }
   };
 
@@ -847,11 +946,11 @@ export default function DompetBulananPage() {
 
                 <button
                   type="button"
-                  onClick={handleAddMerchant}
-                  className="w-full min-h-[46px] rounded-full bg-white hover:bg-[#ffe2df] text-[#306a3b] font-bold text-[13px] flex items-center justify-center gap-2 transition-colors cursor-pointer border border-stone-200/60 shadow-2xs"
+                  onClick={handleOpenWarungModal}
+                  className="w-full min-h-[48px] rounded-full bg-white hover:bg-[#ffe2df] text-[#306a3b] font-bold text-[13px] sm:text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer border border-stone-200/80 shadow-2xs hover:shadow-xs active:scale-[0.99]"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                   </svg>
                   <span>+ Tambah Warung Langganan</span>
                 </button>
@@ -923,9 +1022,20 @@ export default function DompetBulananPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          className={`fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto ${
+            isExitingModal ? 'animate-fadeOut' : 'animate-fadeIn'
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
         >
-          <div className="bg-white w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-200 space-y-5 my-8 max-h-[90vh] overflow-y-auto">
+          <div
+            className={`bg-white w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-200 space-y-5 my-8 max-h-[90vh] overflow-y-auto ${
+              isExitingModal ? 'animate-scaleOut' : 'animate-scaleIn'
+            }`}
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
               <h2 className="text-xl font-bold text-[#2c1514]">
@@ -1037,6 +1147,16 @@ export default function DompetBulananPage() {
                       {merchant}
                     </button>
                   ))}
+                  {modalType === 'expense' && (
+                    <button
+                      type="button"
+                      onClick={handleOpenWarungModal}
+                      className="min-h-[38px] px-3.5 rounded-full text-[12px] font-bold text-[#306a3b] bg-white border border-[#306a3b]/40 hover:bg-[#fff0ef] transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>+</span>
+                      <span>Warung Baru</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1086,6 +1206,193 @@ export default function DompetBulananPage() {
                   className="flex-1 min-h-[46px] rounded-full bg-[#6da003] hover:bg-[#466800] text-white font-bold text-[13px] shadow-sm transition-all cursor-pointer"
                 >
                   Simpan ke Dompet Bulanan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. POP-UP MODAL INPUT WARUNG DENGAN ANIMASI MASUK & KELUAR */}
+      {warungModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="warung-modal-title"
+          className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto ${
+            isExitingWarungModal ? 'animate-fadeOut' : 'animate-fadeIn'
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSavingWarung) {
+              handleCloseWarungModal();
+            }
+          }}
+        >
+          <div
+            className={`bg-white w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl border border-stone-200/90 space-y-5 my-8 relative ${
+              isExitingWarungModal ? 'animate-scaleOut' : 'animate-scaleIn'
+            }`}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-stone-100 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-[#306a3b]/10 text-[#306a3b] flex items-center justify-center font-bold text-xl shadow-2xs shrink-0">
+                  🏪
+                </div>
+                <div>
+                  <h3 id="warung-modal-title" className="text-[18px] font-extrabold text-[#2c1514] leading-tight">
+                    Tambah Warung Langganan
+                  </h3>
+                  <p className="text-[12px] text-[#737a65] mt-0.5 font-medium">
+                    Pedagang atau warung sayur favorit keluarga Ibu
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseWarungModal}
+                disabled={isSavingWarung}
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-[#737a65] hover:text-[#2c1514] flex items-center justify-center transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                aria-label="Tutup Formulir Warung"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Error Alert Box jika input belum valid */}
+            {warungErrorMsg && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[12px] font-semibold flex items-center gap-2 animate-alertEnter">
+                <svg className="w-4 h-4 shrink-0 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>{warungErrorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveWarungSubmit} className="space-y-4">
+              {/* Form Input 1: Nama Warung / Pedagang */}
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-bold text-[#2c1514] flex items-center justify-between">
+                  <span>Nama Warung / Pedagang</span>
+                  <span className="text-[11px] text-rose-600 font-semibold">*Wajib diisi</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={warungNameInput}
+                  onChange={(e) => {
+                    setWarungNameInput(e.target.value);
+                    if (warungErrorMsg) setWarungErrorMsg('');
+                  }}
+                  placeholder="Contoh: Warung Sayur Bu Ani"
+                  className="w-full min-h-[48px] px-4 rounded-2xl bg-[#fff0ef] text-[15px] font-bold text-[#2c1514] border border-stone-200/60 focus:outline-none focus:ring-2 focus:ring-[#306a3b] transition"
+                />
+
+                {/* Saran Nama Cepat */}
+                <div className="space-y-1 pt-1">
+                  <span className="text-[11px] font-semibold text-[#737a65]">Pilihan Cepat:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'Warung Sayur Bu Ani',
+                      'Kios Ayam & Daging Segar',
+                      'Tukang Sayur Keliling',
+                      'Toko Sembako Berkah',
+                      'Pasar Tradisional',
+                    ].map((saran) => (
+                      <button
+                        key={saran}
+                        type="button"
+                        onClick={() => {
+                          setWarungNameInput(saran);
+                          if (warungErrorMsg) setWarungErrorMsg('');
+                        }}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#fff0ef] hover:bg-[#ffe2df] text-[#2c1514] border border-stone-200/50 transition cursor-pointer"
+                      >
+                        + {saran}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Input 2: Kategori / Label Tag Warung */}
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-bold text-[#2c1514]">
+                  Kategori / Jenis Dagangan
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { tag: 'Warung Langganan', icon: '⭐' },
+                    { tag: 'Warung Sayur', icon: '🥬' },
+                    { tag: 'Daging & Ayam', icon: '🍗' },
+                    { tag: 'Ikan & Seafood', icon: '🐟' },
+                    { tag: 'Toko Sembako', icon: '🍚' },
+                    { tag: 'Pasar Tradisional', icon: '🏪' },
+                  ].map((item) => (
+                    <button
+                      key={item.tag}
+                      type="button"
+                      onClick={() => setWarungTagInput(item.tag)}
+                      className={`min-h-[42px] px-3 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        warungTagInput === item.tag
+                          ? 'bg-[#306a3b] text-white border-[#306a3b] shadow-xs'
+                          : 'bg-[#fff0ef] text-[#737a65] border-transparent hover:bg-[#ffe2df]'
+                      }`}
+                    >
+                      <span>{item.icon}</span>
+                      <span>{item.tag}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Form Input 3: Catatan Khusus (Opsional) */}
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-bold text-[#2c1514] flex items-center justify-between">
+                  <span>Patokan Lokasi / Catatan (Opsional)</span>
+                  <span className="text-[11px] text-[#8e9185]">Opsional</span>
+                </label>
+                <input
+                  type="text"
+                  value={warungNotesInput}
+                  onChange={(e) => setWarungNotesInput(e.target.value)}
+                  placeholder="Misal: Dekat pos satpam gang 3, buka jam 05.00 pagi"
+                  className="w-full min-h-[44px] px-4 rounded-xl bg-[#fff0ef] text-[13px] text-[#2c1514] border border-stone-200/60 focus:outline-none focus:ring-2 focus:ring-[#306a3b] transition"
+                />
+              </div>
+
+              {/* Action Buttons: Min 48px touch target */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleCloseWarungModal}
+                  disabled={isSavingWarung}
+                  className="min-h-[48px] px-5 rounded-full border border-stone-300 hover:bg-stone-100 text-[#2c1514] text-[13px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingWarung || !warungNameInput.trim()}
+                  className="flex-1 min-h-[48px] rounded-full bg-[#6da003] hover:bg-[#466800] text-white font-bold text-[14px] shadow-md shadow-[#6da003]/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingWarung ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Menyimpan Warung...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>Simpan Warung Langganan</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

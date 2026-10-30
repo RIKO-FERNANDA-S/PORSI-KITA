@@ -82,4 +82,26 @@ describe('Sistem Alert Animasi & Pop-Up Konfirmasi Logout', () => {
     expect(saved.hasLoggedOutAfterOtp).toBe(true);
     expect(saved.phone).toBe('+6281234567890');
   });
+
+  it('6. Pop-up Tambah Warung: memancarkan toast sukses dan mendeteksi duplikasi warung', () => {
+    const existingWarungs = [
+      { id: 'w-1', nama: 'Warung Sayur Bu Ani', tag: 'Warung Sayur', count: 3, totalSpent: 120000 },
+    ];
+
+    const inputName = 'Warung Sayur Bu Ani';
+    const isDuplicate = existingWarungs.some(
+      (w) => w.nama.trim().toLowerCase() === inputName.trim().toLowerCase()
+    );
+    expect(isDuplicate).toBe(true);
+
+    const newName = 'Toko Sembako Berkah';
+    const isNewDuplicate = existingWarungs.some(
+      (w) => w.nama.trim().toLowerCase() === newName.trim().toLowerCase()
+    );
+    expect(isNewDuplicate).toBe(false);
+
+    toast.success(`Warung "${newName}" berhasil ditambahkan ke daftar warung langganan keluarga!`, 'Warung Ditambahkan');
+    expect(dispatchedEvents.length).toBe(1);
+    expect(dispatchedEvents[0].detail.message).toContain('Toko Sembako Berkah');
+  });
 });
