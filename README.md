@@ -16,6 +16,7 @@
 [![Prisma ORM](https://img.shields.io/badge/Prisma_ORM-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![Gemini AI](https://img.shields.io/badge/Gemini_2.5_Flash-8E75B2?style=for-the-badge&logo=google-gemini&logoColor=white)](https://ai.google.dev/)
 [![Vitest](https://img.shields.io/badge/Vitest-93%20Passed%20(100%25)-green?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![PWA Ready](https://img.shields.io/badge/PWA-Ready-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)](https://porsi-kita.vercel.app)
 [![Deployment](https://img.shields.io/badge/Vercel_Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://porsi-kita.vercel.app)
 
 ---
@@ -152,6 +153,7 @@ flowchart TD
 | **AI Generator** | **Google Gemini 2.5 Flash** | Rekomendasi variasi masakan nusantara dengan latensi ultra rendah dan token hemat. |
 | **Database & Auth** | **Supabase (PostgreSQL)** | Handal, mendukung Row Level Security (RLS) untuk keamanan data tingkat baris database. |
 | **ORM** | **Prisma ORM** | Skema basis data terdefinisi kuat, migrasi terotomatisasi, dan query *type-safe*. |
+| **PWA & Offline** | **Web App Manifest + Service Worker** | Dukungan instalasi instan (Add to Home Screen) dan akses fallback saat berada di pasar tanpa sinyal. |
 | **Pengujian** | **Vitest** | Eksekusi unit test instan dan kompatibel penuh dengan lingkungan ESM modern. |
 
 ---

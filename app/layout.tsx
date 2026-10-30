@@ -1,14 +1,27 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import './globals.css';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import ToastProvider from '../components/ToastProvider';
+import PWAInstaller from '../components/PWAInstaller';
+
+export const viewport: Viewport = {
+  themeColor: '#0C4B20',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+};
 
 export const metadata: Metadata = {
   title: 'Porsi Kita — Satu Menu Keluarga, Gizi Tepat untuk Setiap Anggota',
   description:
     'Aplikasi perencanaan menu mingguan hemat, bebas alergen, dan tepat gizi untuk seluruh anggota keluarga berbasis TKPI 2017 dan AKG Permenkes 28/2019.',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Porsi Kita',
+  },
   icons: {
     icon: [
       { url: '/logo.png', type: 'image/png' },
@@ -27,6 +40,7 @@ export default function RootLayout({
     <html lang="id" className="h-full">
       <body className="min-h-full flex flex-col bg-[#FAFAFA] text-[#0D0101] antialiased">
         <ToastProvider>
+          <PWAInstaller />
           <main className="flex-1">{children}</main>
         </ToastProvider>
       </body>
