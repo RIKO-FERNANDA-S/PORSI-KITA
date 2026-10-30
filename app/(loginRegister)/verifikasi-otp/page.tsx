@@ -73,6 +73,25 @@ function VerifikasiOtpContent() {
     }
   };
 
+  // Event handler paste (Ctrl+V) kode OTP secara mulus menyebar ke seluruh kotak
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text');
+    const cleanDigits = pastedData.replace(/\D/g, '').slice(0, 6);
+    if (!cleanDigits) return;
+
+    const newOtp = [...otp];
+    const digits = cleanDigits.split('');
+    for (let i = 0; i < 6; i++) {
+      newOtp[i] = digits[i] || '';
+    }
+    setOtp(newOtp);
+
+    // Pindahkan fokus ke kotak terakhir yang terisi atau digit ke-6
+    const targetIndex = Math.min(digits.length, 5);
+    inputRefs.current[targetIndex]?.focus();
+  };
+
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
@@ -315,6 +334,7 @@ function VerifikasiOtpContent() {
                     value={digit}
                     onChange={(e) => handleChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
+                    onPaste={handlePaste}
                     className="w-12 h-14 sm:w-13 sm:h-15 text-center text-xl sm:text-2xl font-bold bg-[#FAFAFA] border border-[#E2E0E1] rounded-2xl text-[#0D0101] focus:outline-none focus:ring-2 focus:ring-[#0C4B20] focus:border-transparent transition-all shadow-2xs"
                   />
                 ))}

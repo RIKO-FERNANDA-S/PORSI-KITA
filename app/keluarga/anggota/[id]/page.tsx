@@ -152,7 +152,10 @@ function EditAnggotaContent({
                 min="2"
                 max="120"
                 value={usiaInput}
-                onChange={(e) => setUsiaInput(e.target.value)}
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                  setUsiaInput(clean);
+                }}
                 className="w-full px-4 py-3 rounded-xl border border-stone-200 text-stone-900 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 required
               />

@@ -505,10 +505,12 @@ export default function LengkapiProfilPage() {
                         type="number"
                         min="2"
                         max="100"
-                        value={m.usia_tahun}
-                        onChange={(e) =>
-                          handleUpdateMember(m.id, 'usia_tahun', parseInt(e.target.value, 10) || 0)
-                        }
+                        value={m.usia_tahun === 0 ? '' : m.usia_tahun}
+                        onChange={(e) => {
+                          const clean = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                          const num = clean === '' ? 0 : Math.max(0, parseInt(clean, 10));
+                          handleUpdateMember(m.id, 'usia_tahun', num);
+                        }}
                         required
                         className={`px-3 py-2 rounded-xl border text-xs font-semibold bg-white transition ${
                           memberErrors[m.id]?.usia_tahun

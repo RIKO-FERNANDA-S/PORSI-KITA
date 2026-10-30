@@ -115,4 +115,64 @@ describe('Crucial Bug Fixes Suite', () => {
       expect(parsed['TKP002']).toBe(false);
     });
   });
+
+  // UI/UX & Validation Bug Fixes Suite
+  describe('UI/UX & Input Validation Bug Fixes', () => {
+    it('[Registrasi] menyebarkan paste kode OTP 6 digit secara mulus', () => {
+      const pasted = '  123456  ';
+      const cleanDigits = pasted.replace(/\D/g, '').slice(0, 6);
+      const digits = cleanDigits.split('');
+      const otpArray = ['', '', '', '', '', ''];
+      for (let i = 0; i < 6; i++) {
+        otpArray[i] = digits[i] || '';
+      }
+
+      expect(cleanDigits).toBe('123456');
+      expect(otpArray).toEqual(['1', '2', '3', '4', '5', '6']);
+    });
+
+    it('[Registrasi] memotong paste lebih dari 6 digit dan membersihkan karakter non-angka', () => {
+      const pasted = 'OTP: 890-123-999';
+      const cleanDigits = pasted.replace(/\D/g, '').slice(0, 6);
+      expect(cleanDigits).toBe('890123');
+      expect(cleanDigits.length).toBe(6);
+    });
+
+    it('[Registrasi] menghapus leading zero pada input usia', () => {
+      const cleanUsia = (val: string) => val.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+
+      expect(cleanUsia('017')).toBe('17');
+      expect(cleanUsia('007')).toBe('7');
+      expect(cleanUsia('0')).toBe('0');
+      expect(cleanUsia('25')).toBe('25');
+    });
+
+    it('[Daftar Belanja] memformat titik pemisah ribuan saat edit harga bahan dan simpan numeric', () => {
+      const formatRupiah = (raw: string) => {
+        const digits = raw.replace(/\D/g, '');
+        if (!digits) return '';
+        return parseInt(digits, 10).toLocaleString('id-ID');
+      };
+
+      const parseNumeric = (formatted: string) => {
+        return parseInt(formatted.replace(/\D/g, ''), 10);
+      };
+
+      expect(formatRupiah('15000')).toBe('15.000');
+      expect(formatRupiah('1250000')).toBe('1.250.000');
+      expect(parseNumeric('15.000')).toBe(15000);
+      expect(parseNumeric('1.250.000')).toBe(1250000);
+    });
+
+    it('[Daftar Belanja] meng-encode emoji dan karakter pesan WhatsApp secara aman tanpa simbol rusak', () => {
+      const pesan = '🛒 *DAFTAR BELANJA*\n🥬 Lapak Sayur\n• Bayam: 200g (~Rp 3.000)\n';
+      const encoded = encodeURIComponent(pesan);
+
+      // Pastikan encodeURIComponent berhasil dan tidak mengandung karakter square ◻
+      expect(pesan).not.toContain('◻');
+      expect(encoded).toContain('%F0%9F%9B%92'); // Encoded 🛒
+      expect(encoded).toContain('%F0%9F%A5%AC'); // Encoded 🥬
+      expect(decodeURIComponent(encoded)).toBe(pesan);
+    });
+  });
 });

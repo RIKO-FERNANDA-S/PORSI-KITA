@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" fill="none">
+  <rect width="36" height="36" rx="9" fill="#F4FBF4" stroke="#B2F2B6" stroke-width="1.5" />
+  <!-- Green leaves sprout inside bowl -->
+  <path d="M13 19C11 15 13 11 16 10C16 13 14 17 13 19Z" fill="#75A202" />
+  <path d="M23 19C25 15 23 11 20 10C20 13 22 17 23 19Z" fill="#75A202" />
+  <path d="M18 20V9" stroke="#75A202" stroke-width="2.5" stroke-linecap="round" />
+  <circle cx="18" cy="7" r="2.2" fill="#75A202" />
+
+  <!-- Semicircle Bowl with dark outline -->
+  <path d="M7 21C7 27 12 30 18 30C24 30 29 27 29 21H7Z" fill="#FFFFFF" stroke="#0D0101" stroke-width="2.2" stroke-linejoin="round" />
+  <path d="M13 30H23" stroke="#0D0101" stroke-width="2.2" stroke-linecap="round" />
+</svg>

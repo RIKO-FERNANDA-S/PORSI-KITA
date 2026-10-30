@@ -107,7 +107,7 @@ export function formatTeksWhatsAppBelanja(
     teks += `📍 *${kategori.toUpperCase()}*\n`;
     for (const i of list) {
       const displayJumlah = formatKuantitasBahan(i.nama_bahan, i.kebutuhan_beli_gram);
-      teks += `◻ ${i.nama_bahan}: ${displayJumlah} (~Rp ${i.estimasi_biaya_rp.toLocaleString('id-ID')})\n`;
+      teks += `• ${i.nama_bahan}: ${displayJumlah} (~Rp ${i.estimasi_biaya_rp.toLocaleString('id-ID')})\n`;
     }
     teks += `\n`;
   }
